@@ -1,0 +1,68 @@
+# Sektörel Cesium — Docker servisleri
+#
+# Web (FastAPI) Docker'da DEĞİL — yerelde uvicorn ile çalışır.
+# Burada sadece ağır işlem yapan NodeODM container'ı kalır.
+#
+# Eski Django mimarisindeki db (postgis), redis, web, celery_worker,
+# celery_beat servisleri kaldırıldı. FastAPI tek başına yetiyor.
+#
+# Ayağa kaldırma:
+#   cd docker
+#   docker compose up -d
+#
+# Durum:
+#   docker compose ps
+#
+# NodeODM API: http://localhost:3000
+
+services:
+  nodeodm:
+    # GPU'lu sürüm — orijinal projendeki gibi
+    image: opendronemap/nodeodm:gpu
+    container_name: sc-nodeodm
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Yüklenen fotolar ve üretilen çıktılar persist olsun
+      - nodeodm-data:/var/www/data
+      # Ana projedeki uploads klasörünü read-only mount et
+      - ../data/uploads:/host_uploads:ro
+    command:
+      # Maks. eşzamanlı task = 2; daha fazlası RAM'i şişirir
+      - "--max_concurrency"
+      - "2"
+      # Foto sayısı sınırsız
+      - "--max_images"
+      - "0"
+      # Token (opsiyonel) — açık ağda public erişimi engelle
+      # - "--token"
+      # - "change-me"
+
+    # ---- GPU desteği (nvidia-container-toolkit gerekli) ----
+    # Docker Desktop > Settings > Resources > "Enable GPU" açık olmalı.
+    # GPU yoksa bu blok'u silip image'i opendronemap/nodeodm:latest yap.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # py3dtiles — opsiyonel point cloud (.laz) -> 3D Tiles converter.
+  # NodeODM 3D tiles üretmediyse veya çıktıyı yeniden işlemek istersen.
+  # Manuel kullanım:
+  #   docker compose run --rm py3dtiles py3dtiles convert \
+  #     /data/<uuid>/odm_georeferenced_model.laz \
+  #     --out /data/<uuid>/3d_tiles
+  py3dtiles:
+    image: oslandia/py3dtiles:latest
+    container_name: sc-py3dtiles
+    restart: "no"
+    profiles: ["tools"]   # default 'up'ta başlamasın, sadece istenince
+    volumes:
+      - ../data/outputs:/data
+
+volumes:
+  nodeodm-data:
