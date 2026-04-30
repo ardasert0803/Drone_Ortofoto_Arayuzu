@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sektörel Cesium — Drone Tabanlı Ortofoto Arayüzü</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230d5c63'/%3E%3Ctext x='32' y='41' font-size='28' text-anchor='middle' fill='white' font-family='Arial, sans-serif'%3ESC%3C/text%3E%3C/svg%3E" />
+
+  <!-- CesiumJS (CDN) -->
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.121/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.121/Build/Cesium/Cesium.js"></script>
+
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- ============== Cesium tam ekran arka plan ============== -->
+  <main id="cesiumContainer"></main>
+
+  <!-- ============== Üstte yatay proje şeridi ============== -->
+  <div class="top-strip">
+    <span class="dot"></span>
+    <span><strong>Drone Tabanlı Ortofoto</strong> · Türkiye merkezli yerel sanal ikiz platformu</span>
+  </div>
+
+  <!-- ============== Sol kenar: brand + proje listesi ============== -->
+  <aside id="sidebar-left">
+    <div class="brand">
+      <div class="logo">SC</div>
+      <div class="titles">
+        <span class="name">Sektörel Cesium</span>
+        <span class="subtitle">Drone · Ortofoto · 3D Tile</span>
+      </div>
+    </div>
+
+    <!-- NodeODM sağlık çubuğu -->
+    <div id="health-bar" class="health">
+      <span class="dot"></span><span id="health-text">NodeODM kontrol ediliyor…</span>
+    </div>
+
+    <!-- Proje listesi -->
+    <header>
+      <h2>Projeler</h2>
+      <button id="btn-new-project" class="primary">+ Yeni Proje Oluştur</button>
+    </header>
+    <ul id="task-list" class="task-list">
+      <li class="empty">Henüz proje yok</li>
+    </ul>
+  </aside>
+
+  <!-- ============== Sağ kenar: katmanlar + araçlar + detay ============== -->
+  <aside id="sidebar-right">
+    <section class="panel">
+      <h3>Katmanlar</h3>
+      <label class="toggle">
+        <input type="checkbox" id="layer-orthophoto" checked />
+        <span class="switch"></span>
+        <span>Ortofoto</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="layer-3dtiles" checked />
+        <span class="switch"></span>
+        <span>3D Model (Tiles)</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="layer-osm-buildings" />
+        <span class="switch"></span>
+        <span>OSM Binalar</span>
+      </label>
+      <div class="slider-row">
+        <label for="opacity-orthophoto">Ortofoto opaklık</label>
+        <input type="range" id="opacity-orthophoto" min="0" max="1" step="0.05" value="1" />
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Ölçüm Araçları</h3>
+      <div class="tool-row">
+        <button data-tool="distance">📏 Mesafe</button>
+        <button data-tool="area">⬡ Alan</button>
+        <button data-tool="height">↕ Yükseklik</button>
+        <button data-tool="clear" class="danger">✕ Temizle</button>
+      </div>
+      <div id="measurement-result" class="result">—</div>
+    </section>
+
+    <section class="panel">
+      <h3>Seçili Proje</h3>
+      <div id="task-detail">Proje seçilmedi</div>
+    </section>
+
+    <section class="panel">
+      <h3>Hakkında</h3>
+      <div class="info-card" style="border-color: var(--glass-border); background: rgba(0,0,0,0.2);">
+        Bu arayüz piyasadaki herhangi bir drone'dan alınan görüntüleri
+        ortalama 12 saat içinde ortofoto + 3D modele çevirir, sahaya
+        gitmeden alanı 3 boyutlu gezme imkânı sunar.
+      </div>
+    </section>
+  </aside>
+
+  <!-- ============== Yeni proje modali ============== -->
+  <div id="modal-upload" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <header>
+        <h3>Yeni Proje</h3>
+        <button class="close" data-close-modal>×</button>
+      </header>
+      <form id="upload-form">
+        <div class="modal-grid">
+          <section class="form-section">
+            <h4>Proje Bilgileri</h4>
+            <label>
+              Proje adı
+              <input type="text" name="name" placeholder="örn: santiye_ankara_2026_04" required />
+            </label>
+            <label>
+              Proje tipi / kullanım alanı
+              <select name="use_case" required>
+                <option value="construction">Şantiye / İnşaat takibi</option>
+                <option value="heritage">Kültürel miras dijitalleştirme</option>
+                <option value="generic">Genel ortofoto üretimi</option>
+              </select>
+            </label>
+            <label>
+              Veri kaynağı
+              <select name="data_source" required>
+                <option value="drone">Drone</option>
+                <option value="phone">Telefon</option>
+                <option value="open_source">Açık Kaynak</option>
+              </select>
+            </label>
+            <label>
+              Konum
+              <input type="text" name="location" placeholder="örn: Ankara / Etimesgut" />
+            </label>
+            <label>
+              Çekim tarihi
+              <input type="date" name="capture_date" />
+            </label>
+            <label class="field-span-full">
+              Açıklama
+              <textarea name="description" rows="5" placeholder="Projenin amacı, saha notu veya kısa açıklama"></textarea>
+            </label>
+          </section>
+
+          <section class="form-section">
+            <h4>Veri Yükleme</h4>
+            <div class="field-span-full">
+              <span class="upload-label">Drone fotoğrafları (en az 5)</span>
+              <div class="upload-dropzone">
+                <span class="upload-dropzone-copy">
+                  <span class="upload-kicker">Veri Seti</span>
+                  <strong>Dosya veya klasor sec</strong>
+                  <span class="upload-subtext">JPG, JPEG, PNG veya TIFF formatinda fotogrametri karelerini tek tek ya da klasor olarak ekle</span>
+                </span>
+                <div class="upload-actions">
+                  <label class="upload-picker-button" for="project-images">Dosya sec</label>
+                  <input id="project-images" class="upload-picker" type="file" name="images" multiple accept="image/*" />
+                  <label class="upload-picker-button secondary" for="project-image-folder">Klasor sec</label>
+                  <input id="project-image-folder" class="upload-picker" type="file" multiple accept="image/*" webkitdirectory directory />
+                </div>
+              </div>
+              <div id="upload-file-summary" class="upload-file-summary">Henuz dosya veya klasor secilmedi</div>
+              <div class="upload-compat">Not: Klasor secimi daha cok Chromium tabanli tarayicilarda desteklenir.</div>
+            </div>
+            <p class="hint">
+              Fotoğraflar NodeODM container'ına gönderilecek. İşlem süresi
+              fotoğraf sayısına ve makinenin gücüne (GPU varsa daha hızlı) göre
+              dakikalar–saatler sürer. Hedef: ~12 saat içinde %90+ benzerlik.
+            </p>
+          </section>
+        </div>
+        <div id="upload-status" class="status"></div>
+        <footer>
+          <button type="button" data-close-modal>İptal</button>
+          <button type="submit" class="primary">Gönder</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- ============== Scriptler ============== -->
+  <script src="/js/api.js"></script>
+  <script src="/js/viewer.js"></script>
+  <script src="/js/measurement.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="/js/upload.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

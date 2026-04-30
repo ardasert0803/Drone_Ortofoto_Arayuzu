@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Env
+.env
+.env.local
+
+# Data (drone fotografları ve ODM çıktıları büyük olur)
+data/uploads/*
+data/outputs/*
+data/tiles/*
+!data/uploads/.gitkeep
+!data/outputs/.gitkeep
+!data/tiles/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# Cesium ion token
+cesium_token.txt
+
+# Geçici dosyalar
+*_clean.js
+*.bak
+*.tmp
