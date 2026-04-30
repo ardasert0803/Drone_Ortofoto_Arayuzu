@@ -314,6 +314,23 @@ button.active {
 .task-list .status-pill.COMPLETED { background: rgba(63,185,80,.15);  color: var(--ok); }
 .task-list .status-pill.FAILED    { background: rgba(248,81,73,.15);  color: var(--danger); }
 .task-list .status-pill.QUEUED    { background: rgba(79,158,255,.15); color: var(--accent); }
+.task-list .pipeline-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-soft);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.task-list .meta-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 
 /* ============================================================
  *  SAĞ PANEL — KATMANLAR / ARAÇLAR
@@ -394,11 +411,20 @@ button.active {
 #task-detail .row {
   display: flex; justify-content: space-between;
   padding: 4px 0; border-bottom: 1px dashed var(--glass-border);
+  gap: 10px;
 }
 #task-detail .row:last-of-type { border: none; }
 #task-detail .row b { color: var(--text); font-weight: 600; }
 #task-detail .actions {
   margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap;
+}
+#task-detail .row.stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+#task-detail .row.stacked b {
+  line-height: 1.5;
 }
 
 /* ============================================================
@@ -419,6 +445,10 @@ button.active {
   border-radius: 10px; font-size: 9.5px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.05em;
   margin-bottom: 6px;
+}
+.info-card.info-card-muted {
+  border-color: var(--glass-border);
+  background: rgba(0,0,0,0.2);
 }
 
 /* ============================================================
@@ -728,6 +758,48 @@ button.active {
 }
 .top-strip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .top-strip strong { color: var(--text); font-weight: 600; }
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--glass-border);
+}
+.mode-switch button {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 11px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-soft);
+}
+.mode-switch button.active {
+  background: var(--accent-soft);
+  border-color: rgba(79, 158, 255, 0.28);
+  color: var(--text);
+}
+a.button-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg-2);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: all 0.2s var(--easing);
+}
+a.button-link:hover {
+  background: var(--glass-bg-3);
+  border-color: var(--glass-border-2);
+  transform: translateY(-1px);
+}
 
 /* Responsive — küçük ekranlarda yan paneller daralsın */
 @media (max-width: 1100px) {

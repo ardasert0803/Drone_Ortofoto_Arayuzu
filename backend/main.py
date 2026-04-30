@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from config import settings
-from routers import health, tasks
+from routers import health, indoor, tasks
 
 app = FastAPI(
     title="Sektörel Cesium — Ortofoto Arayüzü",
@@ -39,12 +39,18 @@ app.add_middleware(
 # REST router'ları
 app.include_router(health.router)
 app.include_router(tasks.router)
+app.include_router(indoor.router)
 
 # NodeODM'den indirilen çıktılar (orthophoto.tif, 3d_tiles/...)
 app.mount(
     "/data/outputs",
     StaticFiles(directory=str(settings.OUTPUT_DIR)),
     name="outputs",
+)
+app.mount(
+    "/data/indoor/outputs",
+    StaticFiles(directory=str(settings.INDOOR_OUTPUT_DIR)),
+    name="indoor_outputs",
 )
 
 # Frontend (Cesium SPA) — en sona mount edilmeli, en geniş prefix yakalar

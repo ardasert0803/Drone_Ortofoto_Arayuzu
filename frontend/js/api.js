@@ -9,6 +9,12 @@ window.API = (() => {
     return r.json();
   }
 
+  async function tget(url) {
+    const r = await fetch(base + url);
+    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    return r.text();
+  }
+
   async function jpost(url, body) {
     const r = await fetch(base + url, {
       method: "POST",
@@ -41,5 +47,12 @@ window.API = (() => {
     orthoUrl:    (uuid)     => jget(`/api/tasks/${uuid}/orthophoto/url`),
     tilesetUrl:  (uuid)     => jget(`/api/tasks/${uuid}/tileset/url`),
     projectBounds:(uuid)    => jget(`/api/tasks/${uuid}/bounds`),
+    listIndoorProjects:   ()         => jget("/api/indoor/tasks"),
+    getIndoorProject:     (uuid)     => jget(`/api/indoor/tasks/${uuid}`),
+    createIndoorProject:  (formData) => jpost("/api/indoor/tasks", formData),
+    deleteIndoorProject:  (uuid)     => jdel(`/api/indoor/tasks/${uuid}`),
+    indoorTilesetUrl:     (uuid)     => jget(`/api/indoor/tasks/${uuid}/tileset/url`),
+    indoorLog:            (uuid)     => tget(`/api/indoor/tasks/${uuid}/log`),
+    indoorLogUrl:         (uuid)     => `/api/indoor/tasks/${uuid}/log`,
   };
 })();

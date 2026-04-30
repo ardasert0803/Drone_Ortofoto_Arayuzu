@@ -1,21 +1,49 @@
-/* CesiumJS viewer kurulumu + katman yönetimi.
- * Global: window.AppViewer
- *   .init(token)        -> Cesium.Viewer döner
- *   .loadOrthophoto(url, taskUuid)
- *   .removeOrthophoto(taskUuid)
- *   .loadTileset(url, taskUuid)
- *   .removeTileset(taskUuid)
- *   .toggleOsmBuildings(on)
- *   .setOrthoOpacity(value)
- *   .setProjectBounds(taskUuid, bbox)
- *   .flyTo(taskUuid)
- */
+/* CesiumJS viewer kurulumu + katman yönetimi. */
 window.AppViewer = (() => {
   let viewer = null;
-  const orthophotoLayers = new Map();   // uuid -> ImageryLayer
-  const tilesets         = new Map();   // uuid -> Cesium.Cesium3DTileset
-  const lastBoundingSphere = new Map(); // uuid -> Cesium.BoundingSphere
+  let currentMode = "drone";
   let osmBuildings = null;
+
+  const orthophotoLayers = new Map();     // uuid -> ImageryLayer
+  const tilesets = new Map();             // key(pipeline:uuid) -> Cesium3DTileset
+  const boundingSpheres = new Map();      // key(pipeline:uuid) -> BoundingSphere
+
+  let orthoVisible = true;
+  let droneTilesVisible = true;
+  let indoorTilesVisible = true;
+  let osmVisible = false;
+
+  function _key(uuid, pipeline = "drone") {
+    return `${pipeline}:${uuid}`;
+  }
+
+  function _applySceneMode() {
+    if (!viewer) return;
+    const isIndoor = currentMode === "indoor";
+    viewer.scene.globe.show = !isIndoor;
+    viewer.scene.skyAtmosphere.show = !isIndoor;
+    if (viewer.scene.skyBox) viewer.scene.skyBox.show = !isIndoor;
+    if (viewer.scene.sun) viewer.scene.sun.show = !isIndoor;
+    if (viewer.scene.moon) viewer.scene.moon.show = !isIndoor;
+    viewer.scene.backgroundColor = isIndoor
+      ? Cesium.Color.fromCssColorString("#11161c")
+      : Cesium.Color.BLACK;
+  }
+
+  function _applyVisibility() {
+    for (const layer of orthophotoLayers.values()) {
+      layer.show = currentMode === "drone" && orthoVisible;
+    }
+    for (const [key, tileset] of tilesets.entries()) {
+      const pipeline = key.startsWith("indoor:") ? "indoor" : "drone";
+      tileset.show = pipeline === "indoor"
+        ? currentMode === "indoor" && indoorTilesVisible
+        : currentMode === "drone" && droneTilesVisible;
+    }
+    if (osmBuildings) {
+      osmBuildings.show = currentMode === "drone" && osmVisible;
+    }
+  }
 
   async function init(ionToken) {
     if (ionToken) {
@@ -50,11 +78,10 @@ window.AppViewer = (() => {
       destination: Cesium.Cartesian3.fromDegrees(35.5, 36.0, 2_200_000),
       orientation: {
         heading: 0,
-        pitch:   Cesium.Math.toRadians(-65),
-        roll:    0,
+        pitch: Cesium.Math.toRadians(-65),
+        roll: 0,
       },
     });
-    // Sonra yumuşak bir uçuş ile Türkiye'ye odaklan
     setTimeout(() => {
       viewer.camera.flyTo({
         destination: turkey,
@@ -63,20 +90,22 @@ window.AppViewer = (() => {
       });
     }, 400);
 
-    // Cesium varsayılan çalışma alanı = Türkiye sınırları
     Cesium.Camera.DEFAULT_VIEW_RECTANGLE = turkey;
-    // Home butonuna basıldığında Türkiye'ye dön
     viewer.homeButton?.viewModel?.command.beforeExecute.addEventListener((e) => {
+      if (currentMode === "indoor") return;
       e.cancel = true;
       viewer.camera.flyTo({destination: turkey, duration: 1.5});
     });
 
+    _applySceneMode();
+    _applyVisibility();
     return viewer;
   }
 
-  function getViewer() { return viewer; }
+  function getViewer() {
+    return viewer;
+  }
 
-  // ---------------------------------------------------------------- Ortofoto
   async function loadOrthophoto(source, uuid) {
     if (!viewer) throw new Error("Viewer henüz init edilmedi");
     removeOrthophoto(uuid);
@@ -86,18 +115,16 @@ window.AppViewer = (() => {
     const bbox = typeof source === "object" ? source?.bbox : null;
     if (!url) throw new Error("Ortofoto URL bulunamadi");
 
-    // GeoTIFF tarayıcıda doğrudan render edilemez. Pratik yol:
-    //   1) NodeODM çıktısında orthophoto_tiles/ TMS pyramid varsa onu yükle
-    //   2) Yoksa georeferenced preview varsa tek görsel olarak yükle
-    //   3) Yoksa kullanıcıyı uyar (Cesium ion'a manuel yükleme gerekir)
     const tmsUrl = url.replace(/orthophoto\.tif$/, "orthophoto_tiles");
     let provider = null;
     try {
-      const head = await fetch(tmsUrl + "/tilemapresource.xml", {method: "HEAD"});
+      const head = await fetch(`${tmsUrl}/tilemapresource.xml`, {method: "HEAD"});
       if (head.ok) {
         provider = await Cesium.TileMapServiceImageryProvider.fromUrl(tmsUrl);
       }
-    } catch (_) { /* yoksay */ }
+    } catch (_) {
+      /* yoksay */
+    }
 
     if (!provider && previewUrl && Array.isArray(bbox) && bbox.length === 4) {
       const rectangle = Cesium.Rectangle.fromDegrees(...bbox.map(Number));
@@ -105,32 +132,24 @@ window.AppViewer = (() => {
     }
 
     if (!provider) {
-      console.warn(
-        "Ortofoto preview bulunamadi. " +
-        "GeoTIFF'i Cesium ion'a yükleyip asset id ile çağırmak gerek. " +
-        "Manuel indirme: " + url
-      );
+      console.warn("Ortofoto preview bulunamadi:", url);
       return null;
     }
 
     const layer = viewer.imageryLayers.addImageryProvider(provider);
     orthophotoLayers.set(uuid, layer);
-
     if (provider.rectangle) {
-      lastBoundingSphere.set(
-        uuid,
-        Cesium.BoundingSphere.fromRectangle3D(provider.rectangle)
-      );
+      boundingSpheres.set(_key(uuid, "drone"), Cesium.BoundingSphere.fromRectangle3D(provider.rectangle));
     }
+    _applyVisibility();
     return layer;
   }
 
   function removeOrthophoto(uuid) {
     const layer = orthophotoLayers.get(uuid);
-    if (layer) {
-      viewer.imageryLayers.remove(layer, true);
-      orthophotoLayers.delete(uuid);
-    }
+    if (!layer || !viewer) return;
+    viewer.imageryLayers.remove(layer, true);
+    orthophotoLayers.delete(uuid);
   }
 
   function setOrthoOpacity(value) {
@@ -140,38 +159,47 @@ window.AppViewer = (() => {
   }
 
   function setOrthoVisibility(on) {
-    for (const layer of orthophotoLayers.values()) {
-      layer.show = !!on;
-    }
+    orthoVisible = !!on;
+    _applyVisibility();
   }
 
-  // -------------------------------------------------------------- 3D Tiles
-  async function loadTileset(url, uuid) {
+  async function loadTileset(url, uuid, options = {}) {
     if (!viewer) throw new Error("Viewer henüz init edilmedi");
-    removeTileset(uuid);
+    const pipeline = options.pipeline || "drone";
+    removeTileset(uuid, pipeline);
 
     const tileset = await Cesium.Cesium3DTileset.fromUrl(url, {
-      maximumScreenSpaceError: 16,
+      maximumScreenSpaceError: pipeline === "indoor" ? 8 : 16,
     });
     viewer.scene.primitives.add(tileset);
-    tilesets.set(uuid, tileset);
-    lastBoundingSphere.set(uuid, tileset.boundingSphere);
+    tilesets.set(_key(uuid, pipeline), tileset);
+    boundingSpheres.set(_key(uuid, pipeline), tileset.boundingSphere);
+    _applyVisibility();
     return tileset;
   }
 
-  function removeTileset(uuid) {
-    const t = tilesets.get(uuid);
-    if (t) {
-      viewer.scene.primitives.remove(t);
-      tilesets.delete(uuid);
-    }
-  }
-  function setTilesetVisibility(on) {
-    for (const t of tilesets.values()) t.show = !!on;
+  function removeTileset(uuid, pipeline = "drone") {
+    if (!viewer) return;
+    const key = _key(uuid, pipeline);
+    const tileset = tilesets.get(key);
+    if (!tileset) return;
+    viewer.scene.primitives.remove(tileset);
+    tilesets.delete(key);
+    boundingSpheres.delete(key);
   }
 
-  // ------------------------------------------------------------- OSM buildings
+  function setDroneTilesetVisibility(on) {
+    droneTilesVisible = !!on;
+    _applyVisibility();
+  }
+
+  function setIndoorTilesetVisibility(on) {
+    indoorTilesVisible = !!on;
+    _applyVisibility();
+  }
+
   async function toggleOsmBuildings(on) {
+    osmVisible = !!on;
     if (!viewer) return;
     if (on && !osmBuildings) {
       try {
@@ -180,32 +208,37 @@ window.AppViewer = (() => {
       } catch (e) {
         console.warn("OSM buildings yüklenemedi (Cesium ion token gerekir):", e);
       }
-    } else if (osmBuildings) {
-      osmBuildings.show = !!on;
     }
+    _applyVisibility();
   }
 
-  function setProjectBounds(uuid, bbox) {
+  function setProjectBounds(uuid, bbox, pipeline = "drone") {
     if (!viewer || !Array.isArray(bbox) || bbox.length !== 4) return;
     const [west, south, east, north] = bbox.map(Number);
     if ([west, south, east, north].some(Number.isNaN)) return;
     const rectangle = Cesium.Rectangle.fromDegrees(west, south, east, north);
-    lastBoundingSphere.set(uuid, Cesium.BoundingSphere.fromRectangle3D(rectangle));
+    boundingSpheres.set(_key(uuid, pipeline), Cesium.BoundingSphere.fromRectangle3D(rectangle));
   }
 
-  // ------------------------------------------------------------- Fly-to
-  function flyTo(uuid) {
-    const bs = lastBoundingSphere.get(uuid);
-    if (bs) {
-      viewer.camera.flyToBoundingSphere(bs, {duration: 1.5});
+  function flyTo(uuid, pipeline = currentMode) {
+    if (!viewer) return false;
+    const sphere = boundingSpheres.get(_key(uuid, pipeline));
+    if (sphere) {
+      viewer.camera.flyToBoundingSphere(sphere, {duration: 1.5});
       return true;
     }
-    const t = tilesets.get(uuid);
-    if (t) {
-      viewer.flyTo(t);
+    const tileset = tilesets.get(_key(uuid, pipeline));
+    if (tileset) {
+      viewer.flyTo(tileset, {duration: 1.5});
       return true;
     }
     return false;
+  }
+
+  function setMode(mode) {
+    currentMode = mode === "indoor" ? "indoor" : "drone";
+    _applySceneMode();
+    _applyVisibility();
   }
 
   return {
@@ -217,9 +250,11 @@ window.AppViewer = (() => {
     setOrthoVisibility,
     loadTileset,
     removeTileset,
-    setTilesetVisibility,
+    setDroneTilesetVisibility,
+    setIndoorTilesetVisibility,
     toggleOsmBuildings,
     setProjectBounds,
     flyTo,
+    setMode,
   };
 })();

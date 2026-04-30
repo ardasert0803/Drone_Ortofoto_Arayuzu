@@ -19,7 +19,11 @@
   <!-- ============== Üstte yatay proje şeridi ============== -->
   <div class="top-strip">
     <span class="dot"></span>
-    <span><strong>Drone Tabanlı Ortofoto</strong> · Türkiye merkezli yerel sanal ikiz platformu</span>
+    <span id="mode-caption"><strong>Drone Tabanlı Ortofoto</strong> · Türkiye merkezli yerel sanal ikiz platformu</span>
+    <div class="mode-switch" aria-label="Calisma modu">
+      <button id="btn-mode-drone" class="active" type="button">Drone</button>
+      <button id="btn-mode-indoor" type="button">Indoor</button>
+    </div>
   </div>
 
   <!-- ============== Sol kenar: brand + proje listesi ============== -->
@@ -28,7 +32,7 @@
       <div class="logo">SC</div>
       <div class="titles">
         <span class="name">Sektörel Cesium</span>
-        <span class="subtitle">Drone · Ortofoto · 3D Tile</span>
+        <span id="brand-subtitle" class="subtitle">Drone · Ortofoto · 3D Tile</span>
       </div>
     </div>
 
@@ -39,8 +43,8 @@
 
     <!-- Proje listesi -->
     <header>
-      <h2>Projeler</h2>
-      <button id="btn-new-project" class="primary">+ Yeni Proje Oluştur</button>
+      <h2 id="project-heading">Drone Projeleri</h2>
+      <button id="btn-new-project" class="primary">+ Yeni Drone Projesi</button>
     </header>
     <ul id="task-list" class="task-list">
       <li class="empty">Henüz proje yok</li>
@@ -49,7 +53,7 @@
 
   <!-- ============== Sağ kenar: katmanlar + araçlar + detay ============== -->
   <aside id="sidebar-right">
-    <section class="panel">
+    <section id="panel-layers-drone" class="panel">
       <h3>Katmanlar</h3>
       <label class="toggle">
         <input type="checkbox" id="layer-orthophoto" checked />
@@ -72,6 +76,18 @@
       </div>
     </section>
 
+    <section id="panel-layers-indoor" class="panel" hidden>
+      <h3>Indoor Katmanlar</h3>
+      <label class="toggle">
+        <input type="checkbox" id="layer-indoor-model" checked />
+        <span class="switch"></span>
+        <span>3D Indoor Model</span>
+      </label>
+      <div class="info-card info-card-muted">
+        Indoor modeller georefsiz yerel sahnede acilir. Globe ve OSM katmanlari bu modda gizlenir.
+      </div>
+    </section>
+
     <section class="panel">
       <h3>Ölçüm Araçları</h3>
       <div class="tool-row">
@@ -84,16 +100,14 @@
     </section>
 
     <section class="panel">
-      <h3>Seçili Proje</h3>
+      <h3 id="detail-title">Seçili Drone Projesi</h3>
       <div id="task-detail">Proje seçilmedi</div>
     </section>
 
     <section class="panel">
       <h3>Hakkında</h3>
       <div class="info-card" style="border-color: var(--glass-border); background: rgba(0,0,0,0.2);">
-        Bu arayüz piyasadaki herhangi bir drone'dan alınan görüntüleri
-        ortalama 12 saat içinde ortofoto + 3D modele çevirir, sahaya
-        gitmeden alanı 3 boyutlu gezme imkânı sunar.
+        Bu arayuz hem drone ortofoto is akisini hem de telefonla cekilmis indoor fotogrametri projelerini ayni Cesium arayuzunde yonetir.
       </div>
     </section>
   </aside>
@@ -174,6 +188,80 @@
         <footer>
           <button type="button" data-close-modal>İptal</button>
           <button type="submit" class="primary">Gönder</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <div id="modal-upload-indoor" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <header>
+        <h3>Yeni Indoor Proje</h3>
+        <button class="close" data-close-modal>×</button>
+      </header>
+      <form id="indoor-upload-form">
+        <div class="modal-grid">
+          <section class="form-section">
+            <h4>Indoor Proje Bilgileri</h4>
+            <label>
+              Proje adı
+              <input type="text" name="name" placeholder="orn: ofis_kat2_2026_04" required />
+            </label>
+            <label>
+              Bina adı
+              <input type="text" name="building_name" placeholder="orn: Merkez Ofis" />
+            </label>
+            <label>
+              Kat etiketi
+              <input type="text" name="floor_label" placeholder="orn: Kat 2" />
+            </label>
+            <label>
+              Alan / mekan etiketi
+              <input type="text" name="space_label" placeholder="orn: Toplanti odasi A" />
+            </label>
+            <label>
+              Konum
+              <input type="text" name="location" placeholder="orn: Istanbul / Sisli" />
+            </label>
+            <label>
+              Çekim tarihi
+              <input type="date" name="capture_date" />
+            </label>
+            <label class="field-span-full">
+              Açıklama
+              <textarea name="description" rows="5" placeholder="Cekim notlari, alan tarifi veya kalite notlari"></textarea>
+            </label>
+          </section>
+
+          <section class="form-section">
+            <h4>Telefon Fotoğrafları</h4>
+            <div class="field-span-full">
+              <span class="upload-label">Indoor fotoğraf seti (en az 15)</span>
+              <div class="upload-dropzone">
+                <span class="upload-dropzone-copy">
+                  <span class="upload-kicker">Indoor Capture</span>
+                  <strong>Dosya veya klasor sec</strong>
+                  <span class="upload-subtext">Telefonla cekilmis, yuksek ortusmeli JPG veya PNG karelerini toplu olarak ekle</span>
+                </span>
+                <div class="upload-actions">
+                  <label class="upload-picker-button" for="indoor-images">Dosya sec</label>
+                  <input id="indoor-images" class="upload-picker" type="file" name="images" multiple accept="image/*" />
+                  <label class="upload-picker-button secondary" for="indoor-image-folder">Klasor sec</label>
+                  <input id="indoor-image-folder" class="upload-picker" type="file" multiple accept="image/*" webkitdirectory directory />
+                </div>
+              </div>
+              <div id="indoor-upload-file-summary" class="upload-file-summary">Henuz dosya veya klasor secilmedi</div>
+              <div class="upload-compat">Oneri: ayni mekani farkli acilardan, yuksek ortusmeyle ve hareket bulanigi olmadan cek.</div>
+            </div>
+            <p class="hint">
+              Indoor reconstruction ayri Docker hattinda calisir. Ilk surum telefon foto seti icindir; video ve 360 pano desteklenmez.
+            </p>
+          </section>
+        </div>
+        <div id="indoor-upload-status" class="status"></div>
+        <footer>
+          <button type="button" data-close-modal>İptal</button>
+          <button type="submit" class="primary">Indoor Gorevi Baslat</button>
         </footer>
       </form>
     </div>

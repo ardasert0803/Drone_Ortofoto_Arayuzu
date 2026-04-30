@@ -1,61 +1,146 @@
-/* Ana uygulama orkestrasyonu — sayfa açıldığında tüm parçaları bağlar. */
+/* Ana uygulama orkestrasyonu. */
 (async () => {
   const useCaseLabels = {
-    construction: "Şantiye",
-    heritage: "Kültürel Miras",
+    construction: "Santiye",
+    heritage: "Kulturel Miras",
     generic: "Genel",
   };
   const dataSourceLabels = {
     drone: "Drone",
     phone: "Telefon",
-    open_source: "Açık Kaynak",
+    open_source: "Acik Kaynak",
   };
-  const fetchingOutputs = new Set();
+  const modeMeta = {
+    drone: {
+      heading: "Drone Projeleri",
+      button: "+ Yeni Drone Projesi",
+      detailTitle: "Secili Drone Projesi",
+      brandSubtitle: "Drone · Ortofoto · 3D Tile",
+      caption: "<strong>Drone Tabanli Ortofoto</strong> · Turkiye merkezli yerel sanal ikiz platformu",
+      empty: "Henuz drone projesi yok",
+    },
+    indoor: {
+      heading: "Indoor Projeler",
+      button: "+ Yeni Indoor Projesi",
+      detailTitle: "Secili Indoor Proje",
+      brandSubtitle: "Indoor · Telefon Fotogrametri · 3D Tiles",
+      caption: "<strong>Indoor Fotogrametri</strong> · Telefon foto setlerinden yerel 3D mekansal model uretimi",
+      empty: "Henuz indoor proje yok",
+    },
+  };
 
-  // 1) Backend'den config çek (cesium token vs.)
+  const state = {
+    mode: "drone",
+    projects: {
+      drone: [],
+      indoor: [],
+    },
+    selected: {
+      drone: null,
+      indoor: null,
+    },
+    fetchingDroneOutputs: new Set(),
+  };
+
+  const dom = {
+    projectList: document.getElementById("task-list"),
+    projectDetail: document.getElementById("task-detail"),
+    healthBar: document.getElementById("health-bar"),
+    healthText: document.getElementById("health-text"),
+    modeCaption: document.getElementById("mode-caption"),
+    brandSubtitle: document.getElementById("brand-subtitle"),
+    projectHeading: document.getElementById("project-heading"),
+    detailTitle: document.getElementById("detail-title"),
+    newProjectButton: document.getElementById("btn-new-project"),
+    modeDroneButton: document.getElementById("btn-mode-drone"),
+    modeIndoorButton: document.getElementById("btn-mode-indoor"),
+    droneLayerPanel: document.getElementById("panel-layers-drone"),
+    indoorLayerPanel: document.getElementById("panel-layers-indoor"),
+    droneTilesToggle: document.getElementById("layer-3dtiles"),
+    indoorTilesToggle: document.getElementById("layer-indoor-model"),
+  };
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function formatDate(value) {
+    if (!value) return "—";
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return escapeHtml(value);
+    const ms = numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
+    return new Date(ms).toLocaleString("tr-TR");
+  }
+
+  function currentProjects() {
+    return state.projects[state.mode];
+  }
+
+  function selectedUuid(mode = state.mode) {
+    return state.selected[mode];
+  }
+
+  function setMode(mode) {
+    state.mode = mode === "indoor" ? "indoor" : "drone";
+    const meta = modeMeta[state.mode];
+    dom.projectHeading.textContent = meta.heading;
+    dom.newProjectButton.textContent = meta.button;
+    dom.detailTitle.textContent = meta.detailTitle;
+    dom.brandSubtitle.textContent = meta.brandSubtitle;
+    dom.modeCaption.innerHTML = meta.caption;
+    dom.modeDroneButton.classList.toggle("active", state.mode === "drone");
+    dom.modeIndoorButton.classList.toggle("active", state.mode === "indoor");
+    dom.droneLayerPanel.hidden = state.mode !== "drone";
+    dom.indoorLayerPanel.hidden = state.mode !== "indoor";
+    AppViewer.setMode(state.mode);
+    renderProjectList(currentProjects());
+    const selected = currentProjects().find((project) => project.uuid === selectedUuid());
+    if (selected) {
+      void selectProject(selected, {autoFly: false});
+    } else {
+      dom.projectDetail.textContent = state.mode === "drone"
+        ? "Drone projesi secilmedi"
+        : "Indoor proje secilmedi";
+    }
+  }
+
   let config = {cesium_ion_token: ""};
   try {
     config = await API.config();
-  } catch (e) {
-    console.warn("Backend /api/config çekilemedi:", e);
+  } catch (error) {
+    console.warn("Backend /api/config cekilemedi:", error);
   }
 
-  // 2) Cesium viewer'ı kur
   const viewer = await AppViewer.init(config.cesium_ion_token);
   AppMeasure.init(viewer);
   AppMeasure.bind();
 
-  // 3) Health bar
-  const healthBar = document.getElementById("health-bar");
-  const healthText = document.getElementById("health-text");
   async function refreshHealth() {
     try {
-      const h = await API.health();
-      if (h.nodeodm) {
-        healthBar.className = "health ok";
-        const v = h.nodeodm_info?.version || "?";
-        healthText.textContent = `NodeODM bağlı (v${v})`;
+      const health = await API.health();
+      if (health.nodeodm) {
+        dom.healthBar.className = "health ok";
+        const version = health.nodeodm_info?.version || "?";
+        dom.healthText.textContent = `NodeODM bagli (v${version})`;
       } else {
-        healthBar.className = "health bad";
-        healthText.textContent = "NodeODM erişilemez — docker container çalışıyor mu?";
+        dom.healthBar.className = "health bad";
+        dom.healthText.textContent = "NodeODM erisilemez — docker container calisiyor mu?";
       }
     } catch {
-      healthBar.className = "health bad";
-      healthText.textContent = "Backend yanıt vermedi";
+      dom.healthBar.className = "health bad";
+      dom.healthText.textContent = "Backend yanit vermedi";
     }
   }
-  refreshHealth();
-  setInterval(refreshHealth, 15_000);
 
-  // 4) Proje listesi
-  const projectListEl = document.getElementById("task-list");
-  const projectDetailEl = document.getElementById("task-detail");
-  let selectedProjectUuid = null;
-
-  async function hydrateProjectBounds(uuid) {
+  async function hydrateDroneBounds(uuid) {
     try {
       const {bbox} = await API.projectBounds(uuid);
-      AppViewer.setProjectBounds(uuid, bbox);
+      AppViewer.setProjectBounds(uuid, bbox, "drone");
       return true;
     } catch {
       return false;
@@ -64,186 +149,308 @@
 
   function renderProjectList(projects) {
     if (!projects.length) {
-      projectListEl.innerHTML = '<li class="empty">Henüz proje yok</li>';
+      dom.projectList.innerHTML = `<li class="empty">${modeMeta[state.mode].empty}</li>`;
       return;
     }
-    projectListEl.innerHTML = "";
+
+    dom.projectList.innerHTML = "";
     for (const project of projects) {
       const li = document.createElement("li");
       li.dataset.uuid = project.uuid;
-      if (project.uuid === selectedProjectUuid) li.classList.add("active");
-      const createdAt = project.date_created
-        ? new Date(project.date_created).toLocaleString("tr-TR")
-        : "—";
-      const summaryParts = [
-        useCaseLabels[project.use_case] || null,
-        project.location || null,
-      ].filter(Boolean);
+      if (project.uuid === selectedUuid()) li.classList.add("active");
+
+      const summaryParts = state.mode === "drone"
+        ? [useCaseLabels[project.use_case] || null, project.location || null].filter(Boolean)
+        : [project.building_name || null, project.floor_label || null, project.space_label || project.location || null].filter(Boolean);
+
       li.innerHTML = `
-        <div class="name">${project.name || project.uuid.slice(0, 8)}</div>
-        ${summaryParts.length ? `<div class="submeta">${summaryParts.join(" · ")}</div>` : ""}
+        <div class="name">${escapeHtml(project.name || project.uuid.slice(0, 8))}</div>
+        ${summaryParts.length ? `<div class="submeta">${summaryParts.map(escapeHtml).join(" · ")}</div>` : ""}
         <div class="meta">
-          <span>${createdAt}</span>
-          <span class="status-pill ${project.status_text || ''}">${project.status_text || '?'}</span>
+          <span class="meta-left">
+            <span class="pipeline-badge">${state.mode === "drone" ? "Drone" : "Indoor"}</span>
+            <span>${formatDate(project.date_created)}</span>
+          </span>
+          <span class="status-pill ${escapeHtml(project.status_text || "")}">${escapeHtml(project.status_text || "?")}</span>
         </div>
       `;
-      li.addEventListener("click", () => selectProject(project));
-      projectListEl.appendChild(li);
+      li.addEventListener("click", () => {
+        void selectProject(project);
+      });
+      dom.projectList.appendChild(li);
     }
   }
 
-  async function refreshProjects() {
-    try {
-      const projects = await API.listProjects();
-      renderProjectList(projects);
-    } catch (e) {
-      projectListEl.innerHTML = `<li class="empty">Hata: ${e.message}</li>`;
-    }
-  }
-  refreshProjects();
-  setInterval(refreshProjects, 10_000);
+  function renderDroneDetail(project) {
+    const metadataRows = [
+      project.use_case ? row("Proje tipi", useCaseLabels[project.use_case] || project.use_case) : "",
+      project.data_source ? row("Veri kaynagi", dataSourceLabels[project.data_source] || project.data_source) : "",
+      project.location ? row("Konum", project.location) : "",
+      project.capture_date ? row("Cekim tarihi", project.capture_date) : "",
+      project.description ? stackedRow("Aciklama", project.description) : "",
+    ].join("");
 
-  // 5) Proje seçilince detayları göster + çıktıları yükle
-  async function selectProject(project) {
-    selectedProjectUuid = project.uuid;
-    document.querySelectorAll("#task-list li").forEach(li => {
-      li.classList.toggle("active", li.dataset.uuid === project.uuid);
-    });
-
-    if (projectDetailEl) {
-      const metadataRows = [
-        project.use_case ? `<div class="row"><span>Proje tipi</span><b>${useCaseLabels[project.use_case] || project.use_case}</b></div>` : "",
-        project.data_source ? `<div class="row"><span>Veri kaynağı</span><b>${dataSourceLabels[project.data_source] || project.data_source}</b></div>` : "",
-        project.location ? `<div class="row"><span>Konum</span><b>${project.location}</b></div>` : "",
-        project.capture_date ? `<div class="row"><span>Çekim tarihi</span><b>${project.capture_date}</b></div>` : "",
-        project.description ? `<div class="row"><span>Açıklama</span><b>${project.description}</b></div>` : "",
-      ].join("");
-      projectDetailEl.innerHTML = `
-      <div class="row"><span>UUID</span><b>${project.uuid.slice(0, 12)}…</b></div>
-      <div class="row"><span>Durum</span><b>${project.status_text || '?'}</b></div>
-      <div class="row"><span>Foto</span><b>${project.images_count ?? '—'}</b></div>
-      <div class="row"><span>İlerleme</span><b>${(project.progress ?? 0).toFixed(0)}%</b></div>
+    dom.projectDetail.innerHTML = `
+      ${row("UUID", `${project.uuid.slice(0, 12)}...`)}
+      ${row("Durum", project.status_text || "?")}
+      ${row("Foto", project.images_count ?? "—")}
+      ${row("Ilerleme", `${(project.progress ?? 0).toFixed(0)}%`)}
       ${metadataRows}
-      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap">
-        <button id="btn-fetch">Çıktıları indir</button>
-        <button id="btn-fly">Buraya uç</button>
-        <button id="btn-delete" class="danger">Sil</button>
+      <div class="actions">
+        <button id="btn-fetch">Ciktilari indir</button>
+        <button id="btn-fly">Buraya uc</button>
+        <button id="btn-delete-drone" class="danger">Sil</button>
       </div>
     `;
 
-      document.getElementById("btn-fetch").onclick = () => fetchAndLoadProject(project.uuid);
-      document.getElementById("btn-fly").onclick = () => AppViewer.flyTo(project.uuid);
-      document.getElementById("btn-delete").onclick = async () => {
-        const shouldDelete = await AppToast.confirm("Bu proje silinsin mi?", {
-          confirmText: "Sil",
-          cancelText: "Iptal",
-        });
-        if (!shouldDelete) return;
-        await API.deleteProject(project.uuid);
-        AppViewer.removeOrthophoto(project.uuid);
-        AppViewer.removeTileset(project.uuid);
-        refreshProjects();
-        AppToast.show("Proje silindi.", {tone: "success"});
-      };
-    }
-
-    const hasBounds = await hydrateProjectBounds(project.uuid);
-
-    // Eğer tamamlandıysa çıktıları indirip yüklemeyi dene
-    if (project.status_text === "COMPLETED") {
-      await ensureProjectOutputs(project.uuid);
-    }
-
-    if (hasBounds) {
-      AppViewer.flyTo(project.uuid);
-    }
+    document.getElementById("btn-fetch").onclick = () => {
+      void fetchAndLoadDroneProject(project.uuid);
+    };
+    document.getElementById("btn-fly").onclick = () => AppViewer.flyTo(project.uuid, "drone");
+    document.getElementById("btn-delete-drone").onclick = async () => {
+      const shouldDelete = await AppToast.confirm("Bu drone projesi silinsin mi?", {
+        confirmText: "Sil",
+        cancelText: "Iptal",
+      });
+      if (!shouldDelete) return;
+      await API.deleteProject(project.uuid);
+      AppViewer.removeOrthophoto(project.uuid);
+      AppViewer.removeTileset(project.uuid, "drone");
+      state.selected.drone = null;
+      await refreshDroneProjects();
+      AppToast.show("Drone projesi silindi.", {tone: "success"});
+    };
   }
 
-  async function fetchAndLoadProject(uuid) {
-    document.getElementById("fetch-status")?.remove();
-    if (projectDetailEl) {
-      projectDetailEl.insertAdjacentHTML("beforeend",
-        '<div class="row" id="fetch-status"><span>İndiriliyor…</span></div>');
-    }
-    fetchingOutputs.add(uuid);
+  function renderIndoorDetail(project) {
+    const metadataRows = [
+      row("UUID", `${project.uuid.slice(0, 12)}...`),
+      row("Durum", project.status_text || "?"),
+      row("Asama", project.stage || "upload"),
+      row("Foto", project.images_count ?? "—"),
+      row("Ilerleme", `${(project.progress ?? 0).toFixed(0)}%`),
+      project.building_name ? row("Bina", project.building_name) : "",
+      project.floor_label ? row("Kat", project.floor_label) : "",
+      project.space_label ? row("Alan", project.space_label) : "",
+      project.location ? row("Konum", project.location) : "",
+      project.capture_date ? row("Cekim tarihi", project.capture_date) : "",
+      project.started_at ? row("Baslangic", formatDate(Date.parse(project.started_at))) : "",
+      project.finished_at ? row("Bitis", formatDate(Date.parse(project.finished_at))) : "",
+      project.description ? stackedRow("Aciklama", project.description) : "",
+      project.dispatch_error ? stackedRow("Dispatch", project.dispatch_error) : "",
+      project.error_summary ? stackedRow("Hata ozeti", project.error_summary) : "",
+    ].join("");
+
+    dom.projectDetail.innerHTML = `
+      ${metadataRows}
+      <div class="actions">
+        <button id="btn-view-indoor">Modele git</button>
+        <a id="btn-log-indoor" class="button-link" href="${API.indoorLogUrl(project.uuid)}" target="_blank" rel="noopener noreferrer">Log indir</a>
+        <button id="btn-delete-indoor" class="danger">Sil</button>
+      </div>
+    `;
+
+    document.getElementById("btn-view-indoor").onclick = async () => {
+      const loaded = await ensureIndoorOutputs(project.uuid, true);
+      if (!loaded) {
+        AppToast.show("Tileset henuz hazir degil.", {tone: "info"});
+      }
+    };
+    document.getElementById("btn-delete-indoor").onclick = async () => {
+      const shouldDelete = await AppToast.confirm("Bu indoor proje silinsin mi?", {
+        confirmText: "Sil",
+        cancelText: "Iptal",
+      });
+      if (!shouldDelete) return;
+      await API.deleteIndoorProject(project.uuid);
+      AppViewer.removeTileset(project.uuid, "indoor");
+      state.selected.indoor = null;
+      await refreshIndoorProjects();
+      AppToast.show("Indoor proje silindi.", {tone: "success"});
+    };
+  }
+
+  function row(label, value) {
+    return `<div class="row"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`;
+  }
+
+  function stackedRow(label, value) {
+    return `<div class="row stacked"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`;
+  }
+
+  async function fetchAndLoadDroneProject(uuid) {
+    if (state.fetchingDroneOutputs.has(uuid)) return;
+    state.fetchingDroneOutputs.add(uuid);
     try {
       await API.fetchProjectAssets(uuid);
-      document.getElementById("fetch-status")?.remove();
-      await hydrateProjectBounds(uuid);
-      await tryLoadProjectOutputs(uuid);
-      AppToast.show("Ciktilar indirildi.", {tone: "success"});
-    } catch (e) {
-      const el = document.getElementById("fetch-status");
-      if (el) el.innerHTML = `<span style="color:var(--danger)">Hata: ${e.message}</span>`;
-      AppToast.show(`Hata: ${e.message}`, {tone: "error", duration: 4200});
+      await hydrateDroneBounds(uuid);
+      await tryLoadDroneOutputs(uuid, true);
+      AppToast.show("Drone ciktilari indirildi.", {tone: "success"});
+    } catch (error) {
+      AppToast.show(`Hata: ${error.message}`, {tone: "error", duration: 4200});
     } finally {
-      fetchingOutputs.delete(uuid);
+      state.fetchingDroneOutputs.delete(uuid);
     }
   }
 
-  async function ensureProjectOutputs(uuid) {
-    if (fetchingOutputs.has(uuid)) return;
+  async function ensureDroneOutputs(uuid, autoFly = true) {
+    if (state.fetchingDroneOutputs.has(uuid)) return true;
 
-    let hasOrtho = true;
-    let hasTiles = true;
-
+    let hasOrtho = false;
+    let hasTiles = false;
     try {
-      const o = await API.orthoUrl(uuid);
-      await AppViewer.loadOrthophoto(o, uuid);
-      AppViewer.flyTo(uuid);
+      const orthophoto = await API.orthoUrl(uuid);
+      await AppViewer.loadOrthophoto(orthophoto, uuid);
+      hasOrtho = true;
     } catch {
       hasOrtho = false;
     }
 
     try {
-      const t = await API.tilesetUrl(uuid);
-      if (t.url) {
-        await AppViewer.loadTileset(t.url, uuid);
-        AppViewer.flyTo(uuid);
-      } else {
-        hasTiles = false;
+      const tileset = await API.tilesetUrl(uuid);
+      if (tileset.url) {
+        await AppViewer.loadTileset(tileset.url, uuid, {pipeline: "drone"});
+        hasTiles = true;
       }
     } catch {
       hasTiles = false;
     }
 
-    if (hasOrtho || hasTiles) return;
-    await fetchAndLoadProject(uuid);
+    if (!hasOrtho && !hasTiles) {
+      await fetchAndLoadDroneProject(uuid);
+    }
+    if (autoFly && (hasOrtho || hasTiles)) {
+      AppViewer.flyTo(uuid, "drone");
+    }
+    return hasOrtho || hasTiles;
   }
 
-  async function tryLoadProjectOutputs(uuid) {
-    // Ortofoto
+  async function tryLoadDroneOutputs(uuid, autoFly = true) {
+    let loaded = false;
     try {
-      const o = await API.orthoUrl(uuid);
-      await AppViewer.loadOrthophoto(o, uuid);
-      AppViewer.flyTo(uuid);
-    } catch (e) { console.info("Ortofoto henüz yok:", e.message); }
-    // 3D Tiles
+      const orthophoto = await API.orthoUrl(uuid);
+      await AppViewer.loadOrthophoto(orthophoto, uuid);
+      loaded = true;
+    } catch {
+      /* yoksay */
+    }
     try {
-      const t = await API.tilesetUrl(uuid);
-      if (t.url) {
-        await AppViewer.loadTileset(t.url, uuid);
-        AppViewer.flyTo(uuid);
+      const tileset = await API.tilesetUrl(uuid);
+      if (tileset.url) {
+        await AppViewer.loadTileset(tileset.url, uuid, {pipeline: "drone"});
+        loaded = true;
       }
-    } catch (e) { console.info("3D Tiles henüz yok:", e.message); }
+    } catch {
+      /* yoksay */
+    }
+    if (loaded && autoFly) {
+      AppViewer.flyTo(uuid, "drone");
+    }
+    return loaded;
   }
 
-  // 6) Katman toggle'ları
-  document.getElementById("layer-orthophoto").addEventListener("change", (e) => {
-    AppViewer.setOrthoVisibility(e.target.checked);
+  async function ensureIndoorOutputs(uuid, autoFly = true) {
+    try {
+      const tileset = await API.indoorTilesetUrl(uuid);
+      if (!tileset.url) return false;
+      await AppViewer.loadTileset(tileset.url, uuid, {pipeline: "indoor"});
+      if (autoFly) AppViewer.flyTo(uuid, "indoor");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function selectProject(project, options = {}) {
+    state.selected[state.mode] = project.uuid;
+    renderProjectList(currentProjects());
+
+    if (state.mode === "drone") {
+      renderDroneDetail(project);
+      const hasBounds = await hydrateDroneBounds(project.uuid);
+      if (project.status_text === "COMPLETED") {
+        await ensureDroneOutputs(project.uuid, options.autoFly !== false);
+      } else if (hasBounds && options.autoFly !== false) {
+        AppViewer.flyTo(project.uuid, "drone");
+      }
+      return;
+    }
+
+    renderIndoorDetail(project);
+    if (project.status_text === "COMPLETED") {
+      await ensureIndoorOutputs(project.uuid, options.autoFly !== false);
+    }
+  }
+
+  async function refreshDroneProjects() {
+    try {
+      state.projects.drone = await API.listProjects();
+      if (state.mode === "drone") {
+        renderProjectList(state.projects.drone);
+        const selected = state.projects.drone.find((project) => project.uuid === state.selected.drone);
+        if (selected) {
+          await selectProject(selected, {autoFly: false});
+        }
+      }
+    } catch (error) {
+      if (state.mode === "drone") {
+        dom.projectList.innerHTML = `<li class="empty">Hata: ${escapeHtml(error.message)}</li>`;
+      }
+    }
+  }
+
+  async function refreshIndoorProjects() {
+    try {
+      state.projects.indoor = await API.listIndoorProjects();
+      if (state.mode === "indoor") {
+        renderProjectList(state.projects.indoor);
+        const selected = state.projects.indoor.find((project) => project.uuid === state.selected.indoor);
+        if (selected) {
+          await selectProject(selected, {autoFly: false});
+        }
+      }
+    } catch (error) {
+      if (state.mode === "indoor") {
+        dom.projectList.innerHTML = `<li class="empty">Hata: ${escapeHtml(error.message)}</li>`;
+      }
+    }
+  }
+
+  dom.modeDroneButton.addEventListener("click", () => setMode("drone"));
+  dom.modeIndoorButton.addEventListener("click", () => setMode("indoor"));
+
+  document.getElementById("layer-orthophoto").addEventListener("change", (event) => {
+    AppViewer.setOrthoVisibility(event.target.checked);
   });
-  document.getElementById("layer-3dtiles").addEventListener("change", (e) => {
-    AppViewer.setTilesetVisibility(e.target.checked);
+  dom.droneTilesToggle.addEventListener("change", (event) => {
+    AppViewer.setDroneTilesetVisibility(event.target.checked);
   });
-  document.getElementById("layer-osm-buildings").addEventListener("change", (e) => {
-    AppViewer.toggleOsmBuildings(e.target.checked);
+  dom.indoorTilesToggle.addEventListener("change", (event) => {
+    AppViewer.setIndoorTilesetVisibility(event.target.checked);
   });
-  document.getElementById("opacity-orthophoto").addEventListener("input", (e) => {
-    AppViewer.setOrthoOpacity(e.target.value);
+  document.getElementById("layer-osm-buildings").addEventListener("change", (event) => {
+    void AppViewer.toggleOsmBuildings(event.target.checked);
+  });
+  document.getElementById("opacity-orthophoto").addEventListener("input", (event) => {
+    AppViewer.setOrthoOpacity(event.target.value);
   });
 
-  // 7) Upload modali
   AppUpload.bind({
-    onCreated: () => refreshProjects(),
+    getMode: () => state.mode,
+    onDroneCreated: async () => {
+      await refreshDroneProjects();
+    },
+    onIndoorCreated: async () => {
+      await refreshIndoorProjects();
+    },
   });
+
+  setMode("drone");
+  await refreshHealth();
+  await Promise.all([refreshDroneProjects(), refreshIndoorProjects()]);
+  setInterval(refreshHealth, 15_000);
+  setInterval(() => {
+    void refreshDroneProjects();
+    void refreshIndoorProjects();
+  }, 10_000);
 })();
