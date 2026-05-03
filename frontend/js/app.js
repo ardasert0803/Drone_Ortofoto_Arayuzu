@@ -3,6 +3,7 @@
   const useCaseLabels = {
     construction: "Santiye",
     heritage: "Kulturel Miras",
+    museum: "Muze",
     generic: "Genel",
   };
   const dataSourceLabels = {
@@ -15,8 +16,7 @@
       heading: "Drone Projeleri",
       button: "+ Yeni Drone Projesi",
       detailTitle: "Secili Drone Projesi",
-      brandSubtitle: "Drone · Ortofoto · 3D Tile",
-      caption: "<strong>Drone Tabanli Ortofoto</strong> · Turkiye merkezli yerel sanal ikiz platformu",
+      brandSubtitle: "Drone · Kaliteli Ortofoto",
       empty: "Henuz drone projesi yok",
     },
     indoor: {
@@ -24,7 +24,6 @@
       button: "+ Yeni Indoor Projesi",
       detailTitle: "Secili Indoor Proje",
       brandSubtitle: "Indoor · Telefon Fotogrametri · 3D Tiles",
-      caption: "<strong>Indoor Fotogrametri</strong> · Telefon foto setlerinden yerel 3D mekansal model uretimi",
       empty: "Henuz indoor proje yok",
     },
   };
@@ -47,7 +46,6 @@
     projectDetail: document.getElementById("task-detail"),
     healthBar: document.getElementById("health-bar"),
     healthText: document.getElementById("health-text"),
-    modeCaption: document.getElementById("mode-caption"),
     brandSubtitle: document.getElementById("brand-subtitle"),
     projectHeading: document.getElementById("project-heading"),
     detailTitle: document.getElementById("detail-title"),
@@ -56,6 +54,9 @@
     modeIndoorButton: document.getElementById("btn-mode-indoor"),
     droneLayerPanel: document.getElementById("panel-layers-drone"),
     indoorLayerPanel: document.getElementById("panel-layers-indoor"),
+    measurementPanel: document.getElementById("panel-measurement"),
+    measurementTitle: document.getElementById("measurement-title"),
+    measurementCopy: document.getElementById("measurement-copy"),
     droneTilesToggle: document.getElementById("layer-3dtiles"),
     indoorTilesToggle: document.getElementById("layer-indoor-model"),
   };
@@ -92,7 +93,6 @@
     dom.newProjectButton.textContent = meta.button;
     dom.detailTitle.textContent = meta.detailTitle;
     dom.brandSubtitle.textContent = meta.brandSubtitle;
-    dom.modeCaption.innerHTML = meta.caption;
     dom.modeDroneButton.classList.toggle("active", state.mode === "drone");
     dom.modeIndoorButton.classList.toggle("active", state.mode === "indoor");
     dom.droneLayerPanel.hidden = state.mode !== "drone";
@@ -182,6 +182,7 @@
   }
 
   function renderDroneDetail(project) {
+    dom.detailTitle.textContent = "Secili Drone Projesi";
     const metadataRows = [
       project.use_case ? row("Proje tipi", useCaseLabels[project.use_case] || project.use_case) : "",
       project.data_source ? row("Veri kaynagi", dataSourceLabels[project.data_source] || project.data_source) : "",
@@ -196,17 +197,121 @@
       ${row("Foto", project.images_count ?? "—")}
       ${row("Ilerleme", `${(project.progress ?? 0).toFixed(0)}%`)}
       ${metadataRows}
+      ${droneActionsMarkup()}
+    `;
+
+    bindDroneActions(project);
+  }
+
+  function renderConstructionDetail(project) {
+    dom.detailTitle.textContent = "Santiye Projesi Detayi";
+
+    const summaryRows = [
+      constructionSummaryRow("Proje", project.name),
+      constructionSummaryRow("Durum", project.status_text || "?"),
+      constructionSummaryRow("Konum", project.location),
+      constructionSummaryRow("Cekim tarihi", project.capture_date),
+      constructionSummaryRow("Veri kaynagi", dataSourceLabels[project.data_source] || project.data_source),
+      constructionSummaryRow("Foto", project.images_count ?? "—"),
+    ].join("");
+
+    const fieldCards = [
+      constructionCard(
+        "Saha Ozeti",
+        project.description || "Bu santiye projesi icin henuz saha ozeti girilmedi.",
+      ),
+      constructionListCard("Olcum Hazirliklari", [
+        "Mesafe araci ile cephe, aks veya saha gecis uzunluklarini kontrol et.",
+        "Alan araci ile stok, temel veya kazı yayilimlarini hizlica hesapla.",
+        "Yukseklik araci ile kot farki ve dolgu/kazi degisimlerini dogrula.",
+      ]),
+      constructionListCard("Operasyon Notlari", [
+        project.status_text === "COMPLETED"
+          ? "Ortofoto tamamlandi; olcum ve saha karsilastirmalari hazir."
+          : "Ortofoto tamamlanmadan once bu panel planlama ve not takibi icin kullanilir.",
+        project.location ? `Saha referansi: ${project.location}` : "Saha referansi henuz girilmedi.",
+        project.capture_date ? `Son cekim tarihi: ${project.capture_date}` : "Cekim tarihi bilgisi eksik.",
+      ]),
+    ].join("");
+
+    dom.projectDetail.innerHTML = `
+      <div class="construction-detail">
+        <section class="construction-card construction-hero">
+          <span class="construction-kicker">Santiye Projesi</span>
+          <h4>${escapeHtml(project.name || "Bilgi girilmedi")}</h4>
+          <div class="construction-summary-grid">
+            ${summaryRows}
+          </div>
+        </section>
+        ${fieldCards}
+        ${droneActionsMarkup()}
+      </div>
+    `;
+
+    bindDroneActions(project);
+  }
+
+  function renderMuseumDetail(project) {
+    dom.detailTitle.textContent = "Muze Projesi Detayi";
+
+    const summaryRows = [
+      museumSummaryRow("Muze adi", project.museum_name),
+      museumSummaryRow("Proje", project.name),
+      museumSummaryRow("Durum", project.status_text || "?"),
+      museumSummaryRow("Konum", project.location),
+      museumSummaryRow("Cekim tarihi", project.capture_date),
+      museumSummaryRow("Tarihsel donem", project.historical_period),
+    ].join("");
+
+    const museumCards = [
+      museumTextCard("Tarihce / Aciklama", project.museum_summary),
+      museumTextCard("One Cikan Eserler", project.featured_artifacts),
+      museumTextCard("Koleksiyon Temasi", project.collection_theme),
+      museumVisitCard(project),
+      museumSingleValueCard("Sorumlu", project.curator_contact),
+    ].filter(Boolean).join("");
+
+    dom.projectDetail.innerHTML = `
+      <div class="museum-detail">
+        <section class="museum-card museum-hero">
+          <span class="museum-kicker">Muze Projesi</span>
+          <h4>${escapeHtml(project.museum_name || project.name || "Bilgi girilmedi")}</h4>
+          <div class="museum-summary-grid">
+            ${summaryRows}
+          </div>
+        </section>
+        ${museumCards}
+        ${droneActionsMarkup()}
+      </div>
+    `;
+
+    bindDroneActions(project);
+  }
+
+  function droneActionsMarkup() {
+    return `
       <div class="actions">
-        <button id="btn-fetch">Ciktilari indir</button>
+        <button id="btn-fetch">Ortofotoyu hazirla</button>
         <button id="btn-fly">Buraya uc</button>
         <button id="btn-delete-drone" class="danger">Sil</button>
       </div>
     `;
+  }
 
+  function bindDroneActions(project) {
     document.getElementById("btn-fetch").onclick = () => {
       void fetchAndLoadDroneProject(project.uuid);
     };
-    document.getElementById("btn-fly").onclick = () => AppViewer.flyTo(project.uuid, "drone");
+    document.getElementById("btn-fly").onclick = async () => {
+      const hasBounds = await hydrateDroneBounds(project.uuid);
+      const flew = AppViewer.flyTo(project.uuid, "drone");
+      if (!flew && project.status_text === "COMPLETED") {
+        const loaded = await ensureDroneOutputs(project.uuid, true);
+        if (!loaded && !hasBounds) {
+          AppToast.show("Bu proje icin ucus konumu bulunamadi.", {tone: "info"});
+        }
+      }
+    };
     document.getElementById("btn-delete-drone").onclick = async () => {
       const shouldDelete = await AppToast.confirm("Bu drone projesi silinsin mi?", {
         confirmText: "Sil",
@@ -223,6 +328,7 @@
   }
 
   function renderIndoorDetail(project) {
+    dom.detailTitle.textContent = "Secili Indoor Proje";
     const metadataRows = [
       row("UUID", `${project.uuid.slice(0, 12)}...`),
       row("Durum", project.status_text || "?"),
@@ -278,6 +384,102 @@
     return `<div class="row stacked"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`;
   }
 
+  function museumSummaryRow(label, value) {
+    return `
+      <div class="museum-summary-row">
+        <span>${escapeHtml(label)}</span>
+        <b>${escapeHtml(value || "Bilgi girilmedi")}</b>
+      </div>
+    `;
+  }
+
+  function constructionSummaryRow(label, value) {
+    return `
+      <div class="construction-summary-row">
+        <span>${escapeHtml(label)}</span>
+        <b>${escapeHtml(value || "Bilgi girilmedi")}</b>
+      </div>
+    `;
+  }
+
+  function constructionCard(title, body) {
+    return `
+      <section class="construction-card">
+        <h4>${escapeHtml(title)}</h4>
+        <p>${escapeHtml(body)}</p>
+      </section>
+    `;
+  }
+
+  function constructionListCard(title, items) {
+    const rows = items
+      .filter(Boolean)
+      .map((item) => `<li>${escapeHtml(item)}</li>`)
+      .join("");
+    return `
+      <section class="construction-card">
+        <h4>${escapeHtml(title)}</h4>
+        <ul class="construction-list">${rows}</ul>
+      </section>
+    `;
+  }
+
+  function syncProjectPanels(project = null) {
+    const isIndoor = state.mode === "indoor";
+    const isConstruction = state.mode === "drone" && project?.use_case === "construction";
+    const isMuseum = state.mode === "drone" && project?.use_case === "museum";
+
+    dom.measurementPanel.hidden = !isConstruction;
+
+    if (isConstruction) {
+      dom.measurementTitle.textContent = "Santiye Olcum Araçlari";
+      dom.measurementCopy.textContent = "Saha icin mesafe, alan ve yukseklik olcumlerini bu panelden yonet.";
+    } else if (isMuseum) {
+      dom.measurementTitle.textContent = "Muze Olcum Araçlari";
+      dom.measurementCopy.textContent = "Muze projelerinde bilgi kartlari one cikiyor; olcum paneli bu tipte gizlenir.";
+    } else if (isIndoor) {
+      dom.measurementTitle.textContent = "Indoor Olcum Araçlari";
+      dom.measurementCopy.textContent = "Indoor modda bu panel aktif degil.";
+    } else {
+      dom.measurementTitle.textContent = "Olcum Araçlari";
+      dom.measurementCopy.textContent = "Bu proje tipinde olcum paneli gosterilmiyor.";
+    }
+  }
+
+  function museumTextCard(title, value) {
+    if (!value) return "";
+    return `
+      <section class="museum-card">
+        <h4>${escapeHtml(title)}</h4>
+        <p>${escapeHtml(value)}</p>
+      </section>
+    `;
+  }
+
+  function museumSingleValueCard(title, value) {
+    return `
+      <section class="museum-card">
+        <h4>${escapeHtml(title)}</h4>
+        <div class="museum-inline-value">${escapeHtml(value || "Bilgi girilmedi")}</div>
+      </section>
+    `;
+  }
+
+  function museumVisitCard(project) {
+    const hasVisitorNotes = Boolean(project.visitor_notes);
+    return `
+      <section class="museum-card">
+        <h4>Ziyaret Bilgileri</h4>
+        ${hasVisitorNotes ? `<p>${escapeHtml(project.visitor_notes)}</p>` : ""}
+        <div class="museum-summary-grid museum-summary-grid-compact">
+          ${museumSummaryRow("Saatler", project.visiting_hours)}
+          ${museumSummaryRow("Bilet / Erisim", project.ticket_access)}
+          ${museumSummaryRow("Adres", project.museum_address)}
+        </div>
+      </section>
+    `;
+  }
+
   async function fetchAndLoadDroneProject(uuid) {
     if (state.fetchingDroneOutputs.has(uuid)) return;
     state.fetchingDroneOutputs.add(uuid);
@@ -285,7 +487,7 @@
       await API.fetchProjectAssets(uuid);
       await hydrateDroneBounds(uuid);
       await tryLoadDroneOutputs(uuid, true);
-      AppToast.show("Drone ciktilari indirildi.", {tone: "success"});
+      AppToast.show("Ortofoto Cesium'a yuklendi.", {tone: "success"});
     } catch (error) {
       AppToast.show(`Hata: ${error.message}`, {tone: "error", duration: 4200});
     } finally {
@@ -366,16 +568,26 @@
     renderProjectList(currentProjects());
 
     if (state.mode === "drone") {
-      renderDroneDetail(project);
+      syncProjectPanels(project);
+      if (project.use_case === "museum" && project.status_text === "COMPLETED") {
+        renderMuseumDetail(project);
+      } else if (project.use_case === "construction") {
+        renderConstructionDetail(project);
+      } else {
+        renderDroneDetail(project);
+      }
+      const autoFly = options.autoFly !== false;
       const hasBounds = await hydrateDroneBounds(project.uuid);
-      if (project.status_text === "COMPLETED") {
-        await ensureDroneOutputs(project.uuid, options.autoFly !== false);
-      } else if (hasBounds && options.autoFly !== false) {
+      if (autoFly && hasBounds) {
         AppViewer.flyTo(project.uuid, "drone");
+      }
+      if (project.status_text === "COMPLETED") {
+        await ensureDroneOutputs(project.uuid, autoFly && !hasBounds);
       }
       return;
     }
 
+    syncProjectPanels(project);
     renderIndoorDetail(project);
     if (project.status_text === "COMPLETED") {
       await ensureIndoorOutputs(project.uuid, options.autoFly !== false);
@@ -446,6 +658,7 @@
   });
 
   setMode("drone");
+  syncProjectPanels();
   await refreshHealth();
   await Promise.all([refreshDroneProjects(), refreshIndoorProjects()]);
   setInterval(refreshHealth, 15_000);

@@ -164,6 +164,12 @@ aside h3 {
   text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--muted); font-weight: 600;
 }
+.panel-copy {
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.45;
+}
 
 /* ============================================================
  *  KULLANIM ALANI SEÇİCİ (Şantiye / Kültürel Miras)
@@ -343,6 +349,9 @@ button.active {
   display: flex; flex-direction: column; gap: 10px;
   animation: fadeSlideIn 0.5s var(--easing);
 }
+.panel[hidden] {
+  display: none !important;
+}
 
 /* Toggle (custom checkbox) */
 .toggle {
@@ -426,6 +435,155 @@ button.active {
 #task-detail .row.stacked b {
   line-height: 1.5;
 }
+#task-detail .museum-detail {
+  display: grid;
+  gap: 12px;
+}
+#task-detail .museum-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(79, 158, 255, 0.08));
+  border: 1px solid rgba(79, 158, 255, 0.18);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+}
+#task-detail .museum-card h4 {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+#task-detail .museum-card p {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+#task-detail .museum-hero {
+  background: linear-gradient(160deg, rgba(79, 158, 255, 0.18), rgba(18, 28, 43, 0.7));
+  border-color: rgba(79, 158, 255, 0.28);
+}
+#task-detail .museum-kicker {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-soft);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+#task-detail .museum-hero h4 {
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+#task-detail .museum-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+#task-detail .museum-summary-grid-compact {
+  grid-template-columns: 1fr;
+}
+#task-detail .museum-summary-row {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+#task-detail .museum-summary-row span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+#task-detail .museum-summary-row b,
+#task-detail .museum-inline-value {
+  color: var(--text);
+  line-height: 1.5;
+}
+#task-detail .construction-detail {
+  display: grid;
+  gap: 12px;
+}
+#task-detail .construction-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: linear-gradient(160deg, rgba(255, 184, 77, 0.08), rgba(255, 255, 255, 0.04));
+  border: 1px solid rgba(255, 184, 77, 0.18);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+}
+#task-detail .construction-card h4 {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+#task-detail .construction-card p {
+  margin: 0;
+  line-height: 1.6;
+}
+#task-detail .construction-hero {
+  background: linear-gradient(160deg, rgba(255, 184, 77, 0.18), rgba(23, 21, 16, 0.76));
+  border-color: rgba(255, 184, 77, 0.28);
+}
+#task-detail .construction-kicker {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffd18e;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+#task-detail .construction-hero h4 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+#task-detail .construction-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+#task-detail .construction-summary-row {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+#task-detail .construction-summary-row span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+#task-detail .construction-summary-row b {
+  color: var(--text);
+  line-height: 1.5;
+}
+#task-detail .construction-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+#task-detail .construction-list li {
+  line-height: 1.5;
+}
 
 /* ============================================================
  *  PROJE BİLGİ KARTI (PDF konseptini özetler)
@@ -498,6 +656,134 @@ button.active {
   display: flex; flex-direction: column; gap: 14px;
   padding: 24px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--glass-border-2) transparent;
+  scrollbar-gutter: stable;
+}
+.modal-card form::-webkit-scrollbar {
+  width: 10px;
+}
+.modal-card form::-webkit-scrollbar-track {
+  background: transparent;
+}
+.modal-card form::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+.modal-card form::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+  background-clip: padding-box;
+}
+.project-form-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.project-form-content[hidden],
+.project-type-gate[hidden],
+.museum-form-fields[hidden] {
+  display: none !important;
+}
+.project-use-case-field {
+  display: none !important;
+}
+.project-type-gate {
+  display: grid;
+  gap: 14px;
+  padding: 8px 0 4px;
+}
+.project-type-kicker {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(79, 158, 255, 0.12);
+  color: var(--accent);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.project-type-gate h4 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.project-type-gate p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.55;
+  max-width: 560px;
+}
+.project-type-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.project-type-choice,
+.project-type-switch button {
+  border: 1px solid var(--glass-border);
+  transition: border-color 0.2s var(--easing), background 0.2s var(--easing), transform 0.2s var(--easing), color 0.2s var(--easing);
+}
+.project-type-choice {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: calc(var(--radius-sm) + 2px);
+  background: linear-gradient(145deg, rgba(255,255,255,0.04), rgba(0,0,0,0.16));
+  text-align: left;
+}
+.project-type-choice strong {
+  font-size: 16px;
+  color: var(--text);
+}
+.project-type-choice span {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+.project-type-choice:hover,
+.project-type-switch button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(79, 158, 255, 0.35);
+}
+.project-type-choice.active,
+.project-type-switch button.active {
+  background: linear-gradient(145deg, rgba(79, 158, 255, 0.18), rgba(0, 0, 0, 0.18));
+  border-color: rgba(79, 158, 255, 0.45);
+  color: var(--text);
+}
+.project-type-switch {
+  position: sticky;
+  top: -24px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(13, 18, 24, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-border);
+}
+.selected-project-type-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(79, 158, 255, 0.14);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.project-type-switch button {
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-soft);
 }
 .modal-grid {
   display: grid;
@@ -523,6 +809,13 @@ button.active {
 }
 .field-span-full {
   width: 100%;
+}
+.museum-form-fields {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--glass-border);
 }
 .upload-label {
   display: inline-block;
@@ -665,8 +958,11 @@ button.active {
 }
 .modal-card footer {
   display: flex; justify-content: flex-end; gap: 8px;
-  padding: 18px 0 0; border-top: 1px solid var(--glass-border);
+  position: sticky;
+  bottom: -24px;
+  padding: 18px 0 4px; border-top: 1px solid var(--glass-border);
   margin-top: 8px;
+  background: linear-gradient(180deg, rgba(18, 24, 31, 0.18) 0%, rgba(18, 24, 31, 0.96) 40%);
 }
 .status { font-size: 11.5px; color: var(--muted); min-height: 16px; }
 .status.error { color: var(--danger); }
@@ -745,8 +1041,8 @@ button.active {
   position: absolute;
   top: 16px; left: 50%; transform: translateX(-50%);
   z-index: 10;
-  display: flex; align-items: center; gap: 12px;
-  padding: 8px 18px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 6px;
   background: var(--glass-bg);
   backdrop-filter: blur(var(--blur)) saturate(160%);
   -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
@@ -756,8 +1052,6 @@ button.active {
   font-size: 11.5px; color: var(--text-soft);
   animation: fadeSlideIn 0.6s var(--easing);
 }
-.top-strip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-.top-strip strong { color: var(--text); font-weight: 600; }
 .mode-switch {
   display: inline-flex;
   align-items: center;
@@ -808,6 +1102,9 @@ a.button-link:hover {
     width: min(820px, calc(100vw - 40px));
     max-height: calc(100vh - 40px);
   }
+  .project-type-choice-grid {
+    grid-template-columns: 1fr;
+  }
   .modal-grid {
     grid-template-columns: 1fr;
   }
@@ -836,6 +1133,14 @@ a.button-link:hover {
     padding-left: 18px;
     padding-right: 18px;
   }
+  .project-type-switch {
+    top: -18px;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .selected-project-type-label {
+    justify-content: center;
+  }
   .form-section {
     padding: 16px;
   }
@@ -856,5 +1161,9 @@ a.button-link:hover {
   }
   .upload-picker-button {
     text-align: center;
+  }
+  #task-detail .construction-summary-grid,
+  #task-detail .museum-summary-grid {
+    grid-template-columns: 1fr;
   }
 }

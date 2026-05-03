@@ -12,6 +12,7 @@ Buradaki wrapper sadece bizim arayüzün ihtiyaç duyduğu uçları kapsar:
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -25,7 +26,7 @@ class NodeODMError(RuntimeError):
 
 
 class NodeODMClient:
-    def __init__(self, base_url: str | None = None, timeout: float = 60.0):
+    def __init__(self, base_url: str | None = None, timeout: float = 300.0):
         self.base_url = base_url or settings.NODEODM_URL
         self.timeout = timeout
 
@@ -77,7 +78,7 @@ class NodeODMClient:
 
     async def create_task(
         self,
-        files: Iterable[tuple[str, bytes]],
+        files: Iterable[tuple[str, bytes | Path]],
         name: str | None = None,
         options: list[dict[str, Any]] | None = None,
     ) -> str:
@@ -102,10 +103,18 @@ class NodeODMClient:
 
         # 2) /task/new/upload/{uuid}  -> her foto için
         for fname, content in files:
-            files_payload = {"images": (fname, content, "image/jpeg")}
-            up = await self._request(
-                "POST", f"/task/new/upload/{uuid}", files=files_payload
-            )
+            mime_type = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+            if isinstance(content, Path):
+                with content.open("rb") as fh:
+                    files_payload = {"images": (fname, fh, mime_type)}
+                    up = await self._request(
+                        "POST", f"/task/new/upload/{uuid}", files=files_payload
+                    )
+            else:
+                files_payload = {"images": (fname, content, mime_type)}
+                up = await self._request(
+                    "POST", f"/task/new/upload/{uuid}", files=files_payload
+                )
             self._check(up)
 
         # 3) /task/new/commit/{uuid}  -> işleme başla

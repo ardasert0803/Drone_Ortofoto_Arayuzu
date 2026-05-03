@@ -55,9 +55,9 @@ window.AppViewer = (() => {
       animation: false,
       sceneModePicker: true,
       baseLayerPicker: true,
-      geocoder: true,
+      geocoder: false,
       navigationHelpButton: false,
-      homeButton: true,
+      homeButton: false,
       infoBox: false,
       selectionIndicator: false,
     };

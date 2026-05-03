@@ -52,6 +52,12 @@ window.AppUpload = (() => {
     const filesInput = document.getElementById(options.filesInputId);
     const folderInput = document.getElementById(options.folderInputId);
     const summary = document.getElementById(options.summaryId);
+    const useCaseSelect = form.querySelector("select[name=use_case]");
+    const museumFields = form.querySelector("#museum-fields");
+    const typeGate = form.querySelector("#project-type-gate");
+    const formContent = form.querySelector("#project-form-content");
+    const selectedTypeLabel = form.querySelector("#selected-project-type-label");
+    const useCaseButtons = Array.from((typeGate || form).querySelectorAll("[data-project-use-case]"));
     let selectedSource = "files";
 
     function getSelectedFiles() {
@@ -80,9 +86,60 @@ window.AppUpload = (() => {
       selectedSource = "files";
       status.textContent = "";
       status.className = "status";
+      resetProjectFlow();
+      syncMuseumFields();
       refreshSummary();
       modal.classList.remove("hidden");
-      form.querySelector("input[name=name]")?.focus();
+      if (!typeGate || !formContent) {
+        form.querySelector("input[name=name]")?.focus();
+      }
+    }
+
+    function syncMuseumFields() {
+      if (!museumFields || !useCaseSelect) return;
+      const isMuseum = useCaseSelect.value === "museum";
+      museumFields.hidden = !isMuseum;
+      museumFields.querySelectorAll("input, textarea, select").forEach((field) => {
+        field.disabled = !isMuseum;
+      });
+    }
+
+    function syncUseCaseButtons() {
+      if (!useCaseButtons.length || !useCaseSelect) return;
+      useCaseButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.projectUseCase === useCaseSelect.value);
+      });
+    }
+
+    function syncSelectedTypeLabel() {
+      if (!selectedTypeLabel || !useCaseSelect) return;
+      const selectedOption = useCaseSelect.selectedOptions?.[0];
+      selectedTypeLabel.textContent = (selectedOption?.textContent || useCaseSelect.value || "Proje").trim();
+    }
+
+    function revealProjectForm(nextUseCase) {
+      const shouldFocusName = Boolean(typeGate && !typeGate.hidden);
+      if (useCaseSelect && nextUseCase) {
+        useCaseSelect.value = nextUseCase;
+      }
+      if (typeGate) typeGate.hidden = true;
+      if (formContent) formContent.hidden = false;
+      syncMuseumFields();
+      syncUseCaseButtons();
+      syncSelectedTypeLabel();
+      if (shouldFocusName) {
+        form.querySelector("input[name=name]")?.focus();
+      }
+    }
+
+    function resetProjectFlow() {
+      if (useCaseSelect) {
+        useCaseSelect.value = "construction";
+      }
+      if (typeGate) typeGate.hidden = false;
+      if (formContent) formContent.hidden = true;
+      syncUseCaseButtons();
+      syncSelectedTypeLabel();
     }
 
     return {
@@ -93,10 +150,21 @@ window.AppUpload = (() => {
       filesInput,
       folderInput,
       summary,
+      useCaseSelect,
+      museumFields,
+      typeGate,
+      formContent,
+      selectedTypeLabel,
+      useCaseButtons,
       getSelectedFiles,
       refreshSummary,
       closeModal,
       openModal,
+      syncMuseumFields,
+      syncUseCaseButtons,
+      syncSelectedTypeLabel,
+      revealProjectForm,
+      resetProjectFlow,
       useFiles() {
         selectedSource = "files";
       },
@@ -107,6 +175,18 @@ window.AppUpload = (() => {
   }
 
   function bindModal(config) {
+    config.useCaseSelect?.addEventListener("change", () => {
+      config.syncMuseumFields?.();
+      config.syncUseCaseButtons?.();
+      config.syncSelectedTypeLabel?.();
+    });
+
+    config.useCaseButtons?.forEach((button) => {
+      button.addEventListener("click", () => {
+        config.revealProjectForm?.(button.dataset.projectUseCase);
+      });
+    });
+
     config.modal.addEventListener("click", (event) => {
       if (event.target === config.modal) config.closeModal();
     });
@@ -162,7 +242,7 @@ window.AppUpload = (() => {
       }
 
       Array.from(config.form.elements).forEach((element) => {
-        if (!element?.name || element.type === "file") return;
+        if (!element?.name || element.type === "file" || element.disabled) return;
         const value = typeof element.value === "string" ? element.value.trim() : element.value;
         if (value) formData.append(element.name, value);
       });

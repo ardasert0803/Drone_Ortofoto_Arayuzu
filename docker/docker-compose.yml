@@ -28,6 +28,11 @@ services:
       - nodeodm-data:/var/www/data
       # Ana projedeki uploads klasörünü read-only mount et
       - ../data/uploads:/host_uploads:ro
+    environment:
+      # Tek GPU varsa 0 veya all ayni sonucu verir.
+      # Birden fazla GPU varsa .env icinde NODEODM_GPU_DEVICE=0 gibi secilebilir.
+      NVIDIA_VISIBLE_DEVICES: ${NODEODM_GPU_DEVICE:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
     command:
       # Maks. eşzamanlı task = 2; daha fazlası RAM'i şişirir
       - "--max_concurrency"
@@ -40,7 +45,9 @@ services:
       # - "change-me"
 
     # ---- GPU desteği (nvidia-container-toolkit gerekli) ----
-    # Docker Desktop > Settings > Resources > "Enable GPU" açık olmalı.
+    # Docker Desktop > Settings > Resources > "Enable GPU" acik olmali.
+    # Not: fast-orthophoto akisi yogun GPU kullanmaz; GPU daha cok OpenMVS
+    # gibi dense/3D asamalarinda anlamli sekilde devreye girer.
     # GPU yoksa bu blok'u silip image'i opendronemap/nodeodm:latest yap.
     deploy:
       resources:

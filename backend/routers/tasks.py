@@ -24,8 +24,20 @@ from nodeodm_client import NodeODMError, client as odm
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
-_USE_CASES = {"construction", "heritage", "generic"}
+_USE_CASES = {"construction", "heritage", "generic", "museum"}
 _DATA_SOURCES = {"drone", "phone", "open_source"}
+_MUSEUM_FIELDS = (
+    "museum_name",
+    "historical_period",
+    "museum_summary",
+    "featured_artifacts",
+    "visitor_notes",
+    "museum_address",
+    "visiting_hours",
+    "ticket_access",
+    "collection_theme",
+    "curator_contact",
+)
 
 
 # --------------------------------------------------------------------- #
@@ -44,6 +56,16 @@ class TaskSummary(BaseModel):
     location: str | None = None
     capture_date: str | None = None
     description: str | None = None
+    museum_name: str | None = None
+    historical_period: str | None = None
+    museum_summary: str | None = None
+    featured_artifacts: str | None = None
+    visitor_notes: str | None = None
+    museum_address: str | None = None
+    visiting_hours: str | None = None
+    ticket_access: str | None = None
+    collection_theme: str | None = None
+    curator_contact: str | None = None
 
 
 class TaskCreated(BaseModel):
@@ -60,6 +82,10 @@ _STATUS_TEXT = {
     40: "COMPLETED",
     50: "CANCELED",
 }
+
+
+def _museum_metadata_values(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {field: metadata.get(field) for field in _MUSEUM_FIELDS}
 
 
 def _summarize(info: dict[str, Any]) -> TaskSummary:
@@ -79,6 +105,7 @@ def _summarize(info: dict[str, Any]) -> TaskSummary:
         location=metadata.get("location"),
         capture_date=metadata.get("capture_date"),
         description=metadata.get("description"),
+        **_museum_metadata_values(metadata),
     )
 
 
@@ -109,6 +136,47 @@ def _write_metadata(uuid: str, metadata: dict[str, Any]) -> None:
     _metadata_path(uuid).write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2),
         encoding="utf-8",
+    )
+
+
+def _output_dir_exists(uuid: str) -> bool:
+    return _output_dir(uuid).is_dir()
+
+
+def _local_output_uuids() -> list[str]:
+    if not settings.OUTPUT_DIR.exists():
+        return []
+    return sorted(
+        path.name for path in settings.OUTPUT_DIR.iterdir()
+        if path.is_dir()
+    )
+
+
+def _local_task_summary(uuid: str) -> TaskSummary | None:
+    if not _output_dir_exists(uuid):
+        return None
+
+    metadata = _read_metadata(uuid)
+    output_dir = _output_dir(uuid)
+    try:
+        date_created = int(metadata.get("date_created") or output_dir.stat().st_mtime)
+    except OSError:
+        date_created = None
+
+    return TaskSummary(
+        uuid=uuid,
+        name=metadata.get("name"),
+        status=40,
+        status_text="COMPLETED",
+        progress=100.0,
+        images_count=metadata.get("images_count"),
+        date_created=date_created,
+        use_case=metadata.get("use_case"),
+        data_source=metadata.get("data_source"),
+        location=metadata.get("location"),
+        capture_date=metadata.get("capture_date"),
+        description=metadata.get("description"),
+        **_museum_metadata_values(metadata),
     )
 
 
@@ -144,6 +212,38 @@ def _safe_storage_name(value: str) -> str:
     return clean or datetime.utcnow().strftime("task_%Y%m%d_%H%M%S")
 
 
+async def _persist_uploads(
+    images: list[UploadFile],
+    local_dir: Path,
+) -> list[tuple[str, Path]]:
+    """UploadFile içeriklerini diske stream ederek kaydeder.
+
+    Büyük foto setlerinde tüm dosyaları belleğe almak yerine, her dosya
+    doğrudan kalıcı klasöre yazılır ve NodeODM'e buradan yüklenir.
+    """
+    stored_files: list[tuple[str, Path]] = []
+    for index, img in enumerate(images, start=1):
+        original_name = _clean_optional(img.filename) or f"image_{index:04d}.jpg"
+        safe_name = _safe_storage_name(original_name)
+        target = local_dir / safe_name
+
+        with target.open("wb") as fh:
+            while True:
+                chunk = await img.read(1024 * 1024)
+                if not chunk:
+                    break
+                fh.write(chunk)
+        await img.close()
+
+        if target.stat().st_size == 0:
+            target.unlink(missing_ok=True)
+            continue
+
+        stored_files.append((safe_name, target))
+
+    return stored_files
+
+
 # --------------------------------------------------------------------- #
 # Uçlar
 # --------------------------------------------------------------------- #
@@ -153,21 +253,29 @@ async def list_tasks() -> list[TaskSummary]:
     NodeODM down olsa bile 500 atmaz — boş liste döner. (Health bar zaten
     durumun ne olduğunu kullanıcıya söylüyor.)
     """
+    out: list[TaskSummary] = []
+    live_uuids: set[str] = set()
+
     try:
         uuids = await odm.list_tasks()
     except NodeODMError as exc:
-        # Sessizce boş liste — frontend "Henüz görev yok" gösterir
-        print(f"[tasks] NodeODM erişilemez (boş liste dönüyor): {exc}")
-        return []
+        print(f"[tasks] NodeODM erişilemez, local fallback kullanılacak: {exc}")
+    else:
+        for u in uuids:
+            try:
+                info = await odm.task_info(u)
+                out.append(_summarize(info))
+                live_uuids.add(u)
+            except NodeODMError:
+                continue
 
-    out: list[TaskSummary] = []
-    for u in uuids:
-        try:
-            info = await odm.task_info(u)
-            out.append(_summarize(info))
-        except NodeODMError:
-            # silinmiş veya hata vermiş bir task — atla
+    for uuid in _local_output_uuids():
+        if uuid in live_uuids:
             continue
+        summary = _local_task_summary(uuid)
+        if summary:
+            out.append(summary)
+
     # En yeniler üstte
     out.sort(key=lambda t: t.date_created or 0, reverse=True)
     return out
@@ -178,6 +286,9 @@ async def get_task(uuid: str) -> TaskSummary:
     try:
         info = await odm.task_info(uuid)
     except NodeODMError as exc:
+        summary = _local_task_summary(uuid)
+        if summary:
+            return summary
         raise HTTPException(404, f"Task bulunamadı: {exc}") from exc
     return _summarize(info)
 
@@ -191,6 +302,16 @@ async def create_task(
     location: str | None = Form(None),
     capture_date: str | None = Form(None),
     description: str | None = Form(None),
+    museum_name: str | None = Form(None),
+    historical_period: str | None = Form(None),
+    museum_summary: str | None = Form(None),
+    featured_artifacts: str | None = Form(None),
+    visitor_notes: str | None = Form(None),
+    museum_address: str | None = Form(None),
+    visiting_hours: str | None = Form(None),
+    ticket_access: str | None = Form(None),
+    collection_theme: str | None = Form(None),
+    curator_contact: str | None = Form(None),
 ) -> TaskCreated:
     """Yeni ODM görevi oluşturur ve fotoğrafları gönderir."""
     if not images:
@@ -208,33 +329,45 @@ async def create_task(
     location = _clean_optional(location)
     capture_date = _validate_capture_date(capture_date)
     description = _clean_optional(description)
-
-    # Fotoğrafları belleğe oku (büyük setler için disk-temp kullanılabilir,
-    # şimdilik sade tutuyoruz)
-    files: list[tuple[str, bytes]] = []
-    for img in images:
-        content = await img.read()
-        if not content:
-            continue
-        files.append((img.filename or "image.jpg", content))
-
-    if not files:
-        raise HTTPException(400, "Yüklenen fotoğraflar boş")
+    museum_metadata = {
+        "museum_name": _clean_optional(museum_name),
+        "historical_period": _clean_optional(historical_period),
+        "museum_summary": _clean_optional(museum_summary),
+        "featured_artifacts": _clean_optional(featured_artifacts),
+        "visitor_notes": _clean_optional(visitor_notes),
+        "museum_address": _clean_optional(museum_address),
+        "visiting_hours": _clean_optional(visiting_hours),
+        "ticket_access": _clean_optional(ticket_access),
+        "collection_theme": _clean_optional(collection_theme),
+        "curator_contact": _clean_optional(curator_contact),
+    }
 
     # Yerel kopyasını da sakla — debugging ve timeline için faydalı
     nodeodm_task_name = task_name or datetime.utcnow().strftime("task_%Y%m%d_%H%M%S")
     local_dir = settings.UPLOAD_DIR / _safe_storage_name(nodeodm_task_name)
     local_dir.mkdir(parents=True, exist_ok=True)
-    for fname, content in files:
-        (local_dir / fname).write_bytes(content)
+    try:
+        files = await _persist_uploads(images, local_dir)
+    except OSError as exc:
+        shutil.rmtree(local_dir, ignore_errors=True)
+        raise HTTPException(500, f"Upload dosyalari yazilamadi: {exc}") from exc
 
-    # NodeODM'e gönder. Varsayılan options + 3D Tiles üretimi açık olsun.
+    if not files:
+        shutil.rmtree(local_dir, ignore_errors=True)
+        raise HTTPException(400, "Yüklenen fotoğraflar boş")
+
+    # Varsayılan drone profili: kaliteli ortofoto için full ODM pipeline.
+    # Bu profil dense/OpenMVS aşamalarını korur; GPU mevcutsa bu aşamalarda
+    # devreye girer. Cesium tarafında yine ana çıktı ortofotodur.
     options = [
-        {"name": "dsm", "value": True},
-        {"name": "dtm", "value": True},
-        # NodeODM'de 3D tiles üretimi: --3d-tiles bayrağı (sürüme göre)
-        {"name": "3d-tiles", "value": True},
         {"name": "auto-boundary", "value": True},
+        {"name": "3d-tiles", "value": True},
+        {"name": "orthophoto-png", "value": True},
+        {"name": "build-overviews", "value": True},
+        {"name": "feature-quality", "value": "high"},
+        {"name": "pc-quality", "value": "high"},
+        {"name": "orthophoto-resolution", "value": 2.0},
+        {"name": "mesh-size", "value": 300000},
     ]
     try:
         uuid = await odm.create_task(files, name=nodeodm_task_name, options=options)
@@ -244,11 +377,17 @@ async def create_task(
     _write_metadata(
         uuid,
         {
+          "name": nodeodm_task_name,
+          "images_count": len(files),
+          "date_created": int(datetime.utcnow().timestamp()),
           "use_case": use_case,
           "data_source": data_source,
           "location": location,
           "capture_date": capture_date,
           "description": description,
+          **museum_metadata,
+          "pipeline_profile": "quality_gpu",
+          "local_upload_dir": str(local_dir),
         },
     )
 
@@ -257,10 +396,17 @@ async def create_task(
 
 @router.delete("/{uuid}")
 async def delete_task(uuid: str) -> dict[str, str]:
+    metadata = _read_metadata(uuid)
+    has_local_data = _output_dir_exists(uuid) or _metadata_path(uuid).exists()
     try:
         await odm.remove_task(uuid)
     except NodeODMError as exc:
-        raise HTTPException(404, f"Task silinemedi: {exc}") from exc
+        if not has_local_data:
+            raise HTTPException(404, f"Task silinemedi: {exc}") from exc
+    shutil.rmtree(_output_dir(uuid), ignore_errors=True)
+    local_upload_dir = metadata.get("local_upload_dir")
+    if isinstance(local_upload_dir, str) and local_upload_dir.strip():
+        shutil.rmtree(Path(local_upload_dir), ignore_errors=True)
     _metadata_path(uuid).unlink(missing_ok=True)
     return {"status": "removed", "uuid": uuid}
 
@@ -311,7 +457,24 @@ def _find_georeference_info(uuid: str) -> Path | None:
 
 
 def _find_orthophoto_preview(uuid: str) -> Path | None:
-    return _find_first(uuid, "ortho.png", "orthophoto.png")
+    return _find_first(
+        uuid,
+        "ortho.png",
+        "orthophoto.png",
+        "odm_orthophoto.png",
+    )
+
+
+def _find_point_cloud(uuid: str) -> Path | None:
+    return _find_first(
+        uuid,
+        "odm_georeferenced_model.laz",
+        "georeferenced_model.laz",
+        "odm_georeferenced_model.las",
+        "georeferenced_model.las",
+        "*.laz",
+        "*.las",
+    )
 
 
 def _find_tileset(uuid: str) -> Path | None:
@@ -321,6 +484,101 @@ def _find_tileset(uuid: str) -> Path | None:
         return direct
     matches = list(base_dir.rglob("tileset.json"))
     return matches[0] if matches else None
+
+
+def _extract_tiles_archive(uuid: str) -> Path | None:
+    archive = _output_path(uuid, "3d_tiles.zip")
+    if not archive.exists():
+        return None
+
+    target_dir = _output_dir(uuid) / "3d_tiles"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        with ZipFile(archive, "r") as zf:
+            zf.extractall(target_dir)
+    except BadZipFile:
+        return None
+    except OSError as exc:
+        print(f"[tasks] 3d tiles extraction failed ({uuid}): {exc!r}")
+        return None
+
+    tileset = target_dir / "tileset.json"
+    return tileset if tileset.exists() else None
+
+
+def _generate_tileset_fallback(uuid: str) -> Path | None:
+    point_cloud = _find_point_cloud(uuid)
+    if not point_cloud or not point_cloud.exists():
+        return None
+
+    target_dir = _output_dir(uuid) / "3d_tiles"
+    target_tileset = target_dir / "tileset.json"
+    if target_tileset.exists():
+        return target_tileset
+
+    rel_input = point_cloud.relative_to(settings.OUTPUT_DIR)
+    container_input = f"/data/{rel_input.as_posix()}"
+    container_output = f"/data/{uuid}/3d_tiles"
+
+    docker = shutil.which("docker") or shutil.which("docker.exe")
+    commands: list[list[str]] = []
+    if docker:
+        commands.append([
+            docker,
+            "compose",
+            "--profile",
+            "tools",
+            "run",
+            "--rm",
+            "py3dtiles",
+            "py3dtiles",
+            "convert",
+            container_input,
+            "--out",
+            container_output,
+        ])
+
+    docker_compose = shutil.which("docker-compose") or shutil.which("docker-compose.exe")
+    if docker_compose:
+        commands.append([
+            docker_compose,
+            "--profile",
+            "tools",
+            "run",
+            "--rm",
+            "py3dtiles",
+            "py3dtiles",
+            "convert",
+            container_input,
+            "--out",
+            container_output,
+        ])
+
+    if not commands:
+        print(f"[tasks] py3dtiles fallback skipped ({uuid}): docker compose bulunamadi")
+        return None
+
+    shutil.rmtree(target_dir, ignore_errors=True)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    last_error: Exception | None = None
+    for command in commands:
+        try:
+            subprocess.run(
+                command,
+                cwd=settings.DOCKER_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            break
+        except (OSError, subprocess.CalledProcessError) as exc:
+            last_error = exc
+    else:
+        print(f"[tasks] py3dtiles fallback failed ({uuid}): {last_error!r}")
+        return None
+
+    return target_tileset if target_tileset.exists() else None
 
 
 def _ensure_orthophoto_alias(uuid: str) -> Path | None:
@@ -519,6 +777,10 @@ async def fetch_outputs(uuid: str) -> dict[str, Any]:
     orthophoto_tiles = _ensure_orthophoto_tiles(uuid)
     orthophoto_preview = _find_orthophoto_preview(uuid)
     tileset = _find_tileset(uuid)
+    if not tileset:
+        tileset = _extract_tiles_archive(uuid)
+    if not tileset:
+        tileset = _generate_tileset_fallback(uuid)
     bounds = _bounds_bbox(uuid)
 
     fetched: dict[str, Any] = {
@@ -552,6 +814,10 @@ async def orthophoto_url(uuid: str) -> dict[str, Any]:
 @router.get("/{uuid}/tileset/url")
 async def tileset_url(uuid: str) -> dict[str, str]:
     tileset = _find_tileset(uuid)
+    if not tileset:
+        tileset = _extract_tiles_archive(uuid)
+    if not tileset:
+        tileset = _generate_tileset_fallback(uuid)
     if not tileset:
         return {"url": ""}
     rel = tileset.relative_to(settings.OUTPUT_DIR)
