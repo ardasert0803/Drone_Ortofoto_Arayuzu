@@ -14,7 +14,10 @@ class Settings:
     DOCKER_DIR: Path = BASE_DIR / "docker"
 
     # Cesium ion
-    CESIUM_ION_TOKEN: str = os.getenv("CESIUM_ION_TOKEN", "")
+    CESIUM_ION_TOKEN: str = (
+        os.getenv("CESIUM_ION_TOKEN", "")
+        or os.getenv("Cesium_ION_TOKEN", "")
+    )
 
     # NodeODM
     NODEODM_HOST: str = os.getenv("NODEODM_HOST", "localhost")
