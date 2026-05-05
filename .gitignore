@@ -27,6 +27,7 @@ data/tiles/*
 !data/outputs/.gitkeep
 !data/tiles/.gitkeep
 
+
 # Logs
 *.log
 logs/

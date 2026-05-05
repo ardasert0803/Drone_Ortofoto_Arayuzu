@@ -1,8 +1,11 @@
 /* Drone ve indoor upload modallari. */
 window.AppUpload = (() => {
+  const controllers = {};
+
   function bind(callbacks) {
     const getMode = callbacks?.getMode || (() => "drone");
     const onDroneCreated = callbacks?.onDroneCreated || (() => {});
+    const onDroneUpdated = callbacks?.onDroneUpdated || (() => {});
     const onIndoorCreated = callbacks?.onIndoorCreated || (() => {});
     const launcher = document.getElementById("btn-new-project");
 
@@ -17,7 +20,9 @@ window.AppUpload = (() => {
         summaryId: "upload-file-summary",
         minFiles: 5,
         createRequest: API.createProject,
+        updateRequest: API.updateProject,
         onCreated: onDroneCreated,
+        onUpdated: onDroneUpdated,
         requiredNameMessage: "Proje adi zorunlu.",
         fileMessage: "En az 5 fotograf secmelisin.",
       }),
@@ -37,6 +42,7 @@ window.AppUpload = (() => {
       }),
     };
 
+    Object.assign(controllers, modalConfigs);
     Object.values(modalConfigs).forEach(bindModal);
 
     launcher.addEventListener("click", () => {
@@ -58,10 +64,49 @@ window.AppUpload = (() => {
     const formContent = form.querySelector("#project-form-content");
     const selectedTypeLabel = form.querySelector("#selected-project-type-label");
     const useCaseButtons = Array.from((typeGate || form).querySelectorAll("[data-project-use-case]"));
+    const inlineUseCaseButtons = Array.from((formContent || form).querySelectorAll("#project-type-inline-switch [data-project-use-case]"));
+    const modalTitle = options.mode === "drone" ? document.getElementById("drone-modal-title") : null;
+    const submitButton = options.mode === "drone" ? document.getElementById("drone-submit-button") : null;
+    const editNote = options.mode === "drone" ? document.getElementById("project-edit-note") : null;
+    const uploadSection = options.mode === "drone" ? document.getElementById("drone-upload-section") : null;
+    const inlineSwitch = options.mode === "drone" ? document.getElementById("project-type-inline-switch") : null;
     let selectedSource = "files";
+    let formMode = "create";
+    let editingUuid = null;
 
     function getSelectedFiles() {
       return selectedSource === "folder" ? folderInput.files : filesInput.files;
+    }
+
+    function setMode(mode, project = null) {
+      formMode = mode === "edit" ? "edit" : "create";
+      editingUuid = formMode === "edit" ? project?.uuid || null : null;
+      if (modalTitle) {
+        modalTitle.textContent = formMode === "edit" ? "Projeyi Duzenle" : "Yeni Proje";
+      }
+      if (submitButton) {
+        submitButton.textContent = formMode === "edit" ? "Kaydet" : "Gonder";
+      }
+      if (editNote) {
+        editNote.hidden = formMode !== "edit";
+      }
+      if (uploadSection) {
+        uploadSection.hidden = formMode === "edit";
+      }
+      if (inlineSwitch) {
+        inlineSwitch.hidden = formMode !== "edit";
+      }
+    }
+
+    function fillForm(project) {
+      if (!project) return;
+      Array.from(form.elements).forEach((element) => {
+        if (!element?.name || element.type === "file") return;
+        element.value = project[element.name] ?? "";
+      });
+      if (useCaseSelect && !useCaseSelect.value) {
+        useCaseSelect.value = project.use_case || "construction";
+      }
     }
 
     function refreshSummary() {
@@ -86,6 +131,7 @@ window.AppUpload = (() => {
       selectedSource = "files";
       status.textContent = "";
       status.className = "status";
+      setMode("create");
       resetProjectFlow();
       syncMuseumFields();
       refreshSummary();
@@ -93,6 +139,23 @@ window.AppUpload = (() => {
       if (!typeGate || !formContent) {
         form.querySelector("input[name=name]")?.focus();
       }
+    }
+
+    function openEditModal(project) {
+      form.reset();
+      selectedSource = "files";
+      status.textContent = "";
+      status.className = "status";
+      setMode("edit", project);
+      fillForm(project);
+      if (typeGate) typeGate.hidden = true;
+      if (formContent) formContent.hidden = false;
+      syncMuseumFields();
+      syncUseCaseButtons();
+      syncSelectedTypeLabel();
+      refreshSummary();
+      modal.classList.remove("hidden");
+      form.querySelector("input[name=name]")?.focus();
     }
 
     function syncMuseumFields() {
@@ -105,8 +168,8 @@ window.AppUpload = (() => {
     }
 
     function syncUseCaseButtons() {
-      if (!useCaseButtons.length || !useCaseSelect) return;
-      useCaseButtons.forEach((button) => {
+      if (!useCaseSelect) return;
+      [...useCaseButtons, ...inlineUseCaseButtons].forEach((button) => {
         button.classList.toggle("active", button.dataset.projectUseCase === useCaseSelect.value);
       });
     }
@@ -156,15 +219,24 @@ window.AppUpload = (() => {
       formContent,
       selectedTypeLabel,
       useCaseButtons,
+      inlineUseCaseButtons,
       getSelectedFiles,
       refreshSummary,
       closeModal,
       openModal,
+      openEditModal,
       syncMuseumFields,
       syncUseCaseButtons,
       syncSelectedTypeLabel,
       revealProjectForm,
       resetProjectFlow,
+      setMode,
+      getFormMode() {
+        return formMode;
+      },
+      getEditingUuid() {
+        return editingUuid;
+      },
       useFiles() {
         selectedSource = "files";
       },
@@ -181,8 +253,17 @@ window.AppUpload = (() => {
       config.syncSelectedTypeLabel?.();
     });
 
-    config.useCaseButtons?.forEach((button) => {
+    [...(config.useCaseButtons || []), ...(config.inlineUseCaseButtons || [])].forEach((button) => {
       button.addEventListener("click", () => {
+        if (config.getFormMode?.() === "edit") {
+          if (config.useCaseSelect) {
+            config.useCaseSelect.value = button.dataset.projectUseCase;
+          }
+          config.syncMuseumFields?.();
+          config.syncUseCaseButtons?.();
+          config.syncSelectedTypeLabel?.();
+          return;
+        }
         config.revealProjectForm?.(button.dataset.projectUseCase);
       });
     });
@@ -223,7 +304,6 @@ window.AppUpload = (() => {
 
     config.form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const formData = new FormData();
       const name = config.form.elements.name.value.trim();
       if (!name) {
         config.status.textContent = config.requiredNameMessage;
@@ -233,33 +313,50 @@ window.AppUpload = (() => {
         return;
       }
 
-      const selectedFiles = config.getSelectedFiles();
-      if (!selectedFiles || selectedFiles.length < config.minFiles) {
-        config.status.textContent = config.fileMessage;
-        config.status.className = "status error";
-        AppToast?.show(config.fileMessage, {tone: "error"});
-        return;
-      }
-
+      const formMode = config.getFormMode?.() || "create";
+      const payload = {};
       Array.from(config.form.elements).forEach((element) => {
         if (!element?.name || element.type === "file" || element.disabled) return;
-        const value = typeof element.value === "string" ? element.value.trim() : element.value;
-        if (value) formData.append(element.name, value);
+        payload[element.name] = typeof element.value === "string" ? element.value.trim() : element.value;
       });
-      for (const file of selectedFiles) {
-        formData.append("images", file, file.name);
-      }
 
-      config.status.textContent = `${selectedFiles.length} fotograf gonderiliyor...`;
+      let requestBody = payload;
+      if (formMode !== "edit") {
+        const selectedFiles = config.getSelectedFiles();
+        if (!selectedFiles || selectedFiles.length < config.minFiles) {
+          config.status.textContent = config.fileMessage;
+          config.status.className = "status error";
+          AppToast?.show(config.fileMessage, {tone: "error"});
+          return;
+        }
+        requestBody = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value) requestBody.append(key, value);
+        });
+        for (const file of selectedFiles) {
+          requestBody.append("images", file, file.name);
+        }
+        config.status.textContent = `${selectedFiles.length} fotograf gonderiliyor...`;
+      } else {
+        config.status.textContent = "Proje bilgileri kaydediliyor...";
+      }
       config.status.className = "status";
 
       try {
-        const result = await config.createRequest(formData);
-        config.status.textContent = `Gorev olusturuldu: ${result.uuid}`;
+        const result = formMode === "edit"
+          ? await config.updateRequest(config.getEditingUuid(), requestBody)
+          : await config.createRequest(requestBody);
+        config.status.textContent = formMode === "edit"
+          ? "Proje guncellendi."
+          : `Gorev olusturuldu: ${result.uuid}`;
         config.status.className = "status ok";
-        AppToast?.show("Gorev olusturuldu.", {tone: "success"});
+        AppToast?.show(formMode === "edit" ? "Proje guncellendi." : "Gorev olusturuldu.", {tone: "success"});
         setTimeout(() => config.closeModal(), 800);
-        config.onCreated(result);
+        if (formMode === "edit") {
+          config.onUpdated?.(result);
+        } else {
+          config.onCreated(result);
+        }
       } catch (error) {
         config.status.textContent = `Hata: ${error.message}`;
         config.status.className = "status error";
@@ -268,5 +365,9 @@ window.AppUpload = (() => {
     });
   }
 
-  return {bind};
+  function openDroneEditor(project) {
+    controllers.drone?.openEditModal(project);
+  }
+
+  return {bind, openDroneEditor};
 })();

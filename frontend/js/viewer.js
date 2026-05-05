@@ -3,10 +3,14 @@ window.AppViewer = (() => {
   let viewer = null;
   let currentMode = "drone";
   let osmBuildings = null;
+  let debugClickHandler = null;
+  let persistentClickLogger = null;
 
   const orthophotoLayers = new Map();     // uuid -> ImageryLayer
+  const orthophotoMeta = new Map();       // uuid -> debug info
   const tilesets = new Map();             // key(pipeline:uuid) -> Cesium3DTileset
   const boundingSpheres = new Map();      // key(pipeline:uuid) -> BoundingSphere
+  const tileDebugMeta = new Map();        // key(pipeline:uuid) -> debug info
 
   let orthoVisible = true;
   let droneTilesVisible = true;
@@ -60,6 +64,7 @@ window.AppViewer = (() => {
       homeButton: false,
       infoBox: false,
       selectionIndicator: false,
+      contextOptions: { webgl: { preserveDrawingBuffer: true } },
     };
     if (ionToken) {
       try {
@@ -97,6 +102,7 @@ window.AppViewer = (() => {
       viewer.camera.flyTo({destination: turkey, duration: 1.5});
     });
 
+    _installPersistentClickLogger();
     _applySceneMode();
     _applyVisibility();
     return viewer;
@@ -106,14 +112,261 @@ window.AppViewer = (() => {
     return viewer;
   }
 
-  async function loadOrthophoto(source, uuid) {
-    if (!viewer) throw new Error("Viewer henüz init edilmedi");
-    removeOrthophoto(uuid);
+  function _cartographicFromCartesian(cartesian) {
+    if (!cartesian) return null;
+    const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+    if (!cartographic) return null;
+    return {
+      longitude: Cesium.Math.toDegrees(cartographic.longitude),
+      latitude: Cesium.Math.toDegrees(cartographic.latitude),
+      height: cartographic.height,
+    };
+  }
 
+  function _rectangleToDegrees(rectangle) {
+    if (!rectangle) return null;
+    return {
+      west: Cesium.Math.toDegrees(rectangle.west),
+      south: Cesium.Math.toDegrees(rectangle.south),
+      east: Cesium.Math.toDegrees(rectangle.east),
+      north: Cesium.Math.toDegrees(rectangle.north),
+    };
+  }
+
+  function _matrixTranslationCartographic(matrix) {
+    if (!matrix) return null;
+    const translation = Cesium.Matrix4.getTranslation(matrix, new Cesium.Cartesian3());
+    return _cartographicFromCartesian(translation);
+  }
+
+  function _bboxEquals(left, right) {
+    if (!left && !right) return true;
+    if (!left || !right) return false;
+    return ["west", "south", "east", "north"].every((key) => Number(left[key]) === Number(right[key]));
+  }
+
+  function _regionToCartographics(region) {
+    if (!Array.isArray(region) || region.length < 6) return [];
+    const [west, south, east, north] = region.map(Number);
+    if (![west, south, east, north].every(Number.isFinite)) return [];
+    const lonCenter = (west + east) / 2;
+    const latCenter = (south + north) / 2;
+    return [
+      new Cesium.Cartographic(west, south),
+      new Cesium.Cartographic(west, north),
+      new Cesium.Cartographic(east, south),
+      new Cesium.Cartographic(east, north),
+      new Cesium.Cartographic(lonCenter, latCenter),
+    ];
+  }
+
+  function _sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  async function _applyTerrainHeightOffset(tileset, descriptor, debugMeta) {
+    if (!viewer || !tileset) return null;
+    if (debugMeta?.terrainOffsetApplied) return debugMeta;
+    const terrainProvider = viewer.terrainProvider;
+    if (!terrainProvider || terrainProvider instanceof Cesium.EllipsoidTerrainProvider) {
+      return null;
+    }
+
+    const region = Array.isArray(descriptor?.root?.boundingVolume?.region)
+      ? descriptor.root.boundingVolume.region.map(Number)
+      : null;
+    if (!region || region.length < 6) return null;
+
+    const positions = _regionToCartographics(region);
+    if (!positions.length) return null;
+
+    let sampled = null;
+    try {
+      sampled = await Cesium.sampleTerrainMostDetailed(terrainProvider, positions);
+    } catch (error) {
+      console.warn("[tileset] terrain sample failed", error);
+      return null;
+    }
+
+    const terrainHeights = sampled
+      .map((position) => position?.height)
+      .filter((height) => Number.isFinite(height));
+    if (!terrainHeights.length) return null;
+
+    const modelMinHeight = Number(region[4]);
+    const terrainReferenceHeight = Math.min(...terrainHeights);
+    const offsetMeters = terrainReferenceHeight - modelMinHeight;
+
+    debugMeta.terrainHeights = terrainHeights;
+    debugMeta.terrainReferenceHeight = terrainReferenceHeight;
+    debugMeta.modelMinHeight = modelMinHeight;
+    debugMeta.terrainOffsetMeters = offsetMeters;
+
+    if (!Number.isFinite(offsetMeters) || Math.abs(offsetMeters) < 0.5 || Math.abs(offsetMeters) > 250.0) {
+      return debugMeta;
+    }
+
+    const lonCenter = (region[0] + region[2]) / 2;
+    const latCenter = (region[1] + region[3]) / 2;
+    const normal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormalCartographic(
+      new Cesium.Cartographic(lonCenter, latCenter, 0.0),
+      new Cesium.Cartesian3(),
+    );
+    const offset = Cesium.Cartesian3.multiplyByScalar(normal, offsetMeters, new Cesium.Cartesian3());
+    const translation = Cesium.Matrix4.fromTranslation(offset);
+    tileset.modelMatrix = Cesium.Matrix4.multiplyTransformation(
+      translation,
+      tileset.modelMatrix,
+      new Cesium.Matrix4(),
+    );
+    debugMeta.terrainOffsetApplied = true;
+    return debugMeta;
+  }
+
+  async function _applyTerrainHeightOffsetWithRetry(tileset, descriptor, debugMeta, attempts = 4) {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      debugMeta.terrainOffsetAttempt = attempt;
+      const result = await _applyTerrainHeightOffset(tileset, descriptor, debugMeta);
+      if (result?.terrainOffsetApplied || result?.terrainHeights?.length) {
+        return result;
+      }
+      if (attempt < attempts) {
+        viewer?.scene?.requestRender?.();
+        await _sleep(250 * attempt);
+      }
+    }
+    return debugMeta;
+  }
+
+  function _primitiveBoundingSphere(primitive) {
+    if (!primitive) return null;
+    try {
+      const sphere = primitive.boundingSphere;
+      if (!sphere) return null;
+      return {
+        radius: sphere.radius,
+        centerCartographic: _cartographicFromCartesian(sphere.center),
+      };
+    } catch (error) {
+      console.debug("[3d-debug] primitive boundingSphere henuz hazir degil", error);
+      return null;
+    }
+  }
+
+  function _debugProjectAlignment(uuid, pipeline = "drone", extra = {}) {
+    let debug = null;
+    try {
+      debug = getTilesetDebugInfo(uuid, pipeline);
+    } catch (error) {
+      console.warn("[3d-debug] debugProjectAlignment failed", uuid, pipeline, error);
+      return null;
+    }
+    if (!debug) return null;
+    const ortho = orthophotoMeta.get(uuid) || null;
+    const payload = {
+      uuid,
+      pipeline,
+      ortho,
+      tileset: debug,
+      camera: _cartographicFromCartesian(viewer?.camera?.positionWC),
+      ...extra,
+    };
+    console.groupCollapsed(`[3d-debug] ${pipeline}:${uuid}`);
+    console.log(payload);
+    console.groupEnd();
+    return payload;
+  }
+
+  function _debugAfterNextRender(uuid, pipeline, primitive, extra = {}) {
+    if (!viewer) return;
+    const callback = () => {
+      viewer.scene.postRender.removeEventListener(callback);
+      _debugProjectAlignment(uuid, pipeline, {
+        ...extra,
+        modelBoundingSphere: _primitiveBoundingSphere(primitive),
+      });
+    };
+    viewer.scene.postRender.addEventListener(callback);
+    viewer.scene.requestRender();
+  }
+
+  function _pickWorldPosition(screenPosition) {
+    if (!viewer || !screenPosition) return null;
+    const scene = viewer.scene;
+    const ray = viewer.camera.getPickRay(screenPosition);
+    const globePick = ray ? scene.globe.pick(ray, scene) : null;
+    const depthPick = scene.pickPositionSupported ? scene.pickPosition(screenPosition) : null;
+    return depthPick || globePick || viewer.camera.pickEllipsoid(screenPosition, scene.globe.ellipsoid);
+  }
+
+  function armClickLoggerOnce(context = {}) {
+    if (!viewer) return false;
+    if (debugClickHandler) {
+      debugClickHandler.destroy();
+      debugClickHandler = null;
+    }
+    debugClickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    debugClickHandler.setInputAction((click) => {
+      const cartesian = _pickWorldPosition(click.position);
+      const cartographic = _cartographicFromCartesian(cartesian);
+      console.log("[3d-click]", {
+        ...context,
+        screen: click.position ? {x: click.position.x, y: click.position.y} : null,
+        cartographic,
+      });
+      debugClickHandler?.destroy();
+      debugClickHandler = null;
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    console.info("[3d-click] Haritada bir noktaya tikla; koordinatlar console'a yazilacak.");
+    return true;
+  }
+
+  function _installPersistentClickLogger() {
+    if (!viewer) return;
+    if (persistentClickLogger) {
+      persistentClickLogger.destroy();
+      persistentClickLogger = null;
+    }
+    persistentClickLogger = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    persistentClickLogger.setInputAction((click) => {
+      const cartesian = _pickWorldPosition(click.position);
+      const cartographic = _cartographicFromCartesian(cartesian);
+      console.log("[map-click]", {
+        mode: currentMode,
+        screen: click.position ? {x: click.position.x, y: click.position.y} : null,
+        cartographic,
+      });
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  }
+
+  async function loadOrthophoto(source, uuid, options = {}) {
+    if (!viewer) throw new Error("Viewer henüz init edilmedi");
     const url = typeof source === "string" ? source : source?.url;
     const previewUrl = typeof source === "object" ? source?.preview_url : null;
     const bbox = typeof source === "object" ? source?.bbox : null;
     if (!url) throw new Error("Ortofoto URL bulunamadi");
+    const nextBbox = Array.isArray(bbox) && bbox.length === 4
+      ? {
+          west: Number(bbox[0]),
+          south: Number(bbox[1]),
+          east: Number(bbox[2]),
+          north: Number(bbox[3]),
+        }
+      : null;
+    const currentLayer = orthophotoLayers.get(uuid) || null;
+    const currentMeta = orthophotoMeta.get(uuid) || null;
+    if (
+      options.forceReload !== true
+      && currentLayer
+      && currentMeta
+      && currentMeta.url === url
+      && currentMeta.previewUrl === previewUrl
+      && _bboxEquals(currentMeta.sourceBbox, nextBbox)
+    ) {
+      return currentLayer;
+    }
+
+    removeOrthophoto(uuid);
 
     const tmsUrl = url.replace(/orthophoto\.tif$/, "orthophoto_tiles");
     let provider = null;
@@ -138,6 +391,13 @@ window.AppViewer = (() => {
 
     const layer = viewer.imageryLayers.addImageryProvider(provider);
     orthophotoLayers.set(uuid, layer);
+    orthophotoMeta.set(uuid, {
+      sourceBbox: nextBbox,
+      providerRectangle: _rectangleToDegrees(provider.rectangle),
+      providerType: provider?.constructor?.name || "UnknownImageryProvider",
+      previewUrl,
+      url,
+    });
     if (provider.rectangle) {
       boundingSpheres.set(_key(uuid, "drone"), Cesium.BoundingSphere.fromRectangle3D(provider.rectangle));
     }
@@ -150,6 +410,7 @@ window.AppViewer = (() => {
     if (!layer || !viewer) return;
     viewer.imageryLayers.remove(layer, true);
     orthophotoLayers.delete(uuid);
+    orthophotoMeta.delete(uuid);
   }
 
   function setOrthoOpacity(value) {
@@ -166,15 +427,47 @@ window.AppViewer = (() => {
   async function loadTileset(url, uuid, options = {}) {
     if (!viewer) throw new Error("Viewer henüz init edilmedi");
     const pipeline = options.pipeline || "drone";
+    const key = _key(uuid, pipeline);
+    const currentTileset = tilesets.get(key) || null;
+    const currentDebug = tileDebugMeta.get(key) || null;
+    if (options.forceReload !== true && currentTileset && currentDebug?.sourceUrl === url) {
+      return currentTileset;
+    }
+
     removeTileset(uuid, pipeline);
+
+    const descriptorResponse = await fetch(url);
+    if (!descriptorResponse.ok) {
+      throw new Error(`Tileset JSON yuklenemedi: ${descriptorResponse.status}`);
+    }
+    const descriptor = await descriptorResponse.json();
+    const contentUri = descriptor?.root?.content?.uri;
 
     const tileset = await Cesium.Cesium3DTileset.fromUrl(url, {
       maximumScreenSpaceError: pipeline === "indoor" ? 8 : 16,
     });
     viewer.scene.primitives.add(tileset);
-    tilesets.set(_key(uuid, pipeline), tileset);
-    boundingSpheres.set(_key(uuid, pipeline), tileset.boundingSphere);
+    const debugMeta = {
+      type: "tileset",
+      sourceUrl: url,
+      rootTransform: Array.isArray(descriptor?.root?.transform) ? descriptor.root.transform : null,
+      contentUri: typeof contentUri === "string" ? contentUri : null,
+      transformTranslationCartographic: Array.isArray(descriptor?.root?.transform)
+        ? _matrixTranslationCartographic(Cesium.Matrix4.fromArray(descriptor.root.transform))
+        : null,
+      region: Array.isArray(descriptor?.root?.boundingVolume?.region)
+        ? descriptor.root.boundingVolume.region.map(Number)
+        : null,
+    };
+    await _applyTerrainHeightOffsetWithRetry(tileset, descriptor, debugMeta);
+    tilesets.set(key, tileset);
+    tileDebugMeta.set(key, debugMeta);
+    boundingSpheres.set(key, tileset.boundingSphere);
     _applyVisibility();
+    _debugProjectAlignment(uuid, pipeline, {
+      phase: "load-3dtileset",
+      tilesetBoundingSphere: _primitiveBoundingSphere(tileset),
+    });
     return tileset;
   }
 
@@ -186,6 +479,7 @@ window.AppViewer = (() => {
     viewer.scene.primitives.remove(tileset);
     tilesets.delete(key);
     boundingSpheres.delete(key);
+    tileDebugMeta.delete(key);
   }
 
   function setDroneTilesetVisibility(on) {
@@ -218,6 +512,42 @@ window.AppViewer = (() => {
     if ([west, south, east, north].some(Number.isNaN)) return;
     const rectangle = Cesium.Rectangle.fromDegrees(west, south, east, north);
     boundingSpheres.set(_key(uuid, pipeline), Cesium.BoundingSphere.fromRectangle3D(rectangle));
+  }
+
+  function getTilesetDebugInfo(uuid, pipeline = "drone") {
+    if (!viewer) return null;
+    const key = _key(uuid, pipeline);
+    const tileset = tilesets.get(key);
+    if (!tileset) return null;
+    const sphere = boundingSpheres.get(key) || null;
+    let centerCartographic = null;
+    if (sphere?.center) {
+      const cartographic = Cesium.Cartographic.fromCartesian(sphere.center);
+      if (cartographic) {
+        centerCartographic = {
+          longitude: Cesium.Math.toDegrees(cartographic.longitude),
+          latitude: Cesium.Math.toDegrees(cartographic.latitude),
+          height: cartographic.height,
+        };
+      }
+    }
+    return {
+      show: tileset.show,
+      radius: sphere?.radius ?? null,
+      centerCartographic,
+      primitiveBoundingSphere: _primitiveBoundingSphere(tileset),
+      rootTransform: tileDebugMeta.get(key)?.rootTransform || (Array.isArray(tileset.root?.transform) ? Array.from(tileset.root.transform) : null),
+      transformTranslationCartographic: tileDebugMeta.get(key)?.transformTranslationCartographic || null,
+      region: tileDebugMeta.get(key)?.region || null,
+      contentUri: tileDebugMeta.get(key)?.contentUri || null,
+      terrainHeights: tileDebugMeta.get(key)?.terrainHeights || null,
+      terrainReferenceHeight: tileDebugMeta.get(key)?.terrainReferenceHeight ?? null,
+      modelMinHeight: tileDebugMeta.get(key)?.modelMinHeight ?? null,
+      terrainOffsetMeters: tileDebugMeta.get(key)?.terrainOffsetMeters ?? null,
+      terrainOffsetApplied: tileDebugMeta.get(key)?.terrainOffsetApplied === true,
+      terrainOffsetAttempt: tileDebugMeta.get(key)?.terrainOffsetAttempt ?? null,
+      type: tileDebugMeta.get(key)?.type || "tileset",
+    };
   }
 
   function flyTo(uuid, pipeline = currentMode) {
@@ -254,6 +584,9 @@ window.AppViewer = (() => {
     setIndoorTilesetVisibility,
     toggleOsmBuildings,
     setProjectBounds,
+    getTilesetDebugInfo,
+    debugProjectAlignment: _debugProjectAlignment,
+    armClickLoggerOnce,
     flyTo,
     setMode,
   };

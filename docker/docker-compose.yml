@@ -40,6 +40,9 @@ services:
       # Foto sayısı sınırsız
       - "--max_images"
       - "0"
+      # Tüm yeni task'larda 3D tiles üretimini varsayılan olarak aç
+      - "--options"
+      - '[{"name":"3d-tiles","value":true},{"name":"build-overviews","value":true}]'
       # Token (opsiyonel) — açık ağda public erişimi engelle
       # - "--token"
       # - "change-me"
@@ -64,7 +67,7 @@ services:
   #     /data/<uuid>/odm_georeferenced_model.laz \
   #     --out /data/<uuid>/3d_tiles
   py3dtiles:
-    image: oslandia/py3dtiles:latest
+    image: py3dtiles/py3dtiles:latest
     container_name: sc-py3dtiles
     restart: "no"
     profiles: ["tools"]   # default 'up'ta başlamasın, sadece istenince

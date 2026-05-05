@@ -25,6 +25,16 @@ window.API = (() => {
     return r.json();
   }
 
+  async function jput(url, body) {
+    const r = await fetch(base + url, {
+      method: "PUT",
+      headers: body instanceof FormData ? {} : {"Content-Type": "application/json"},
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    return r.json();
+  }
+
   async function jdel(url) {
     const r = await fetch(base + url, {method: "DELETE"});
     if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
@@ -37,11 +47,13 @@ window.API = (() => {
     listTasks:   ()         => jget("/api/tasks"),
     getTask:     (uuid)     => jget(`/api/tasks/${uuid}`),
     createTask:  (formData) => jpost("/api/tasks", formData),
+    updateTask:  (uuid, body) => jput(`/api/tasks/${uuid}`, body),
     deleteTask:  (uuid)     => jdel(`/api/tasks/${uuid}`),
     fetchAssets: (uuid)     => jpost(`/api/tasks/${uuid}/fetch`),
     listProjects:      ()         => jget("/api/tasks"),
     getProject:        (uuid)     => jget(`/api/tasks/${uuid}`),
     createProject:     (formData) => jpost("/api/tasks", formData),
+    updateProject:     (uuid, body) => jput(`/api/tasks/${uuid}`, body),
     deleteProject:     (uuid)     => jdel(`/api/tasks/${uuid}`),
     fetchProjectAssets:(uuid)     => jpost(`/api/tasks/${uuid}/fetch`),
     orthoUrl:    (uuid)     => jget(`/api/tasks/${uuid}/orthophoto/url`),

@@ -25,27 +25,43 @@
 
   <!-- ============== Sol kenar: brand + proje listesi ============== -->
   <aside id="sidebar-left">
-    <div class="brand">
-      <div class="logo">SC</div>
-      <div class="titles">
-        <span class="name">Sektörel Cesium</span>
-        <span id="brand-subtitle" class="subtitle">Drone · Kaliteli Ortofoto</span>
+    <!-- Varsayılan içerik — şantiye modunda gizlenir -->
+    <div id="sidebar-default-content">
+      <div class="brand">
+        <div class="logo">SC</div>
+        <div class="titles">
+          <span class="name">Sektörel Cesium</span>
+          <span id="brand-subtitle" class="subtitle">Drone · Kaliteli Ortofoto</span>
+        </div>
       </div>
+
+      <!-- NodeODM sağlık çubuğu -->
+      <div id="health-bar" class="health">
+        <span class="dot"></span><span id="health-text">NodeODM kontrol ediliyor…</span>
+      </div>
+
+      <!-- Proje listesi -->
+      <header>
+        <h2 id="project-heading">Drone Projeleri</h2>
+        <button id="btn-new-project" class="primary">+ Yeni Drone Projesi</button>
+      </header>
+      <ul id="task-list" class="task-list">
+        <li class="empty">Henüz proje yok</li>
+      </ul>
     </div>
 
-    <!-- NodeODM sağlık çubuğu -->
-    <div id="health-bar" class="health">
-      <span class="dot"></span><span id="health-text">NodeODM kontrol ediliyor…</span>
+    <!-- Şantiye modu içeriği — seçili proje şantiye olduğunda gösterilir -->
+    <div id="sidebar-construction" hidden>
+      <div class="constr-back-bar">
+        <button id="btn-back-to-projects" class="back-button" type="button">← Projeler</button>
+        <span class="site-badge">Şantiye</span>
+      </div>
+      <div class="constr-site-header">
+        <h2 id="constr-site-name">—</h2>
+        <div id="constr-site-meta" class="constr-site-meta"></div>
+      </div>
+      <div id="constr-quick-stats" class="constr-quick-stats"></div>
     </div>
-
-    <!-- Proje listesi -->
-    <header>
-      <h2 id="project-heading">Drone Projeleri</h2>
-      <button id="btn-new-project" class="primary">+ Yeni Drone Projesi</button>
-    </header>
-    <ul id="task-list" class="task-list">
-      <li class="empty">Henüz proje yok</li>
-    </ul>
   </aside>
 
   <!-- ============== Sağ kenar: katmanlar + araçlar + detay ============== -->
@@ -85,24 +101,84 @@
       </div>
     </section>
 
-    <section id="panel-measurement" class="panel" hidden>
-      <h3 id="measurement-title">Ölçüm Araçları</h3>
-      <div id="measurement-copy" class="panel-copy">Saha icin mesafe, alan ve yukseklik olcumlerini bu panelden yonet.</div>
-      <div class="tool-row">
-        <button data-tool="distance">📏 Mesafe</button>
-        <button data-tool="area">⬡ Alan</button>
-        <button data-tool="height">↕ Yükseklik</button>
-        <button data-tool="clear" class="danger">✕ Temizle</button>
+    <!-- Şantiye moduna özel sadeleştirilmiş katman paneli -->
+    <section id="panel-layers-construction" class="panel" hidden>
+      <h3>Katmanlar</h3>
+      <label class="toggle">
+        <input type="checkbox" id="layer-ortho-constr" checked />
+        <span class="switch"></span>
+        <span>Ortofoto</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="layer-3d-constr" checked />
+        <span class="switch"></span>
+        <span>3D Model</span>
+      </label>
+      <div class="slider-row">
+        <label for="opacity-ortho-constr">Opaklık</label>
+        <input type="range" id="opacity-ortho-constr" min="0" max="1" step="0.05" value="1" />
       </div>
-      <div id="measurement-result" class="result">—</div>
     </section>
 
-    <section class="panel">
+    <section id="panel-measurement" class="panel" hidden>
+      <h3 id="measurement-title">Ölçüm Araçları</h3>
+      <div class="tool-row">
+        <button data-tool="distance"><span class="icon icon-ruler"></span>Mesafe</button>
+        <button data-tool="area"><span class="icon icon-polygon"></span>Alan</button>
+        <button data-tool="height"><span class="icon icon-height"></span>Yükseklik</button>
+        <button data-tool="slope"><span class="icon icon-slope"></span>Eğim</button>
+        <button data-tool="coordinate"><span class="icon icon-location"></span>Koordinat</button>
+        <button data-tool="clear" class="danger"><span class="icon icon-trash"></span>Temizle</button>
+      </div>
+      <div id="measurement-result" class="result">—</div>
+      <button id="btn-copy-measurement" class="secondary" type="button" hidden>Kopyala</button>
+      <div class="measurement-disclaimer">
+        ⚠ Ölçümler yaklaşık değer sunar; gerçek değerleri tam yansıtmayabilir. Kritik iş kararlarında profesyonel arazi ölçümü yapınız.
+      </div>
+    </section>
+
+    <!-- Saha notları — şantiye modunda gösterilir -->
+    <section id="panel-quick-notes" class="panel" hidden>
+      <h3>Saha Notları</h3>
+      <button id="btn-add-note" type="button" class="note-add-btn"><span class="icon icon-pin"></span>Not Ekle</button>
+
+      <div id="note-form" class="note-form" hidden>
+        <div id="note-pick-status" class="note-pick-status"></div>
+        <select id="note-category" class="note-category-select">
+          <option value="not">— Not</option>
+          <option value="sorun">— Sorun</option>
+          <option value="ilerleme">— İlerleme</option>
+          <option value="tehlike">— Tehlike</option>
+        </select>
+        <input type="text" id="note-text" class="note-text-input" placeholder="Açıklama girin..." maxlength="120" />
+        <div class="note-form-actions">
+          <button id="btn-save-note" type="button" class="primary">Kaydet</button>
+          <button id="btn-cancel-note" type="button">İptal</button>
+        </div>
+      </div>
+
+      <div id="notes-list" class="notes-list">
+        <div class="notes-empty">Henüz saha notu yok.</div>
+      </div>
+    </section>
+
+    <!-- Şantiye moduna özel saha özeti + aksiyon paneli -->
+    <section id="panel-site-info" class="panel" hidden>
+      <h3>Saha Özeti</h3>
+      <div id="site-info-content" class="site-info-content"></div>
+      <div class="panel-actions">
+        <button id="btn-constr-fly" type="button"><span class="icon icon-navigation"></span>Sahaya Uç</button>
+        <button id="btn-constr-refresh" type="button"><span class="icon icon-refresh"></span>Yenile</button>
+        <button id="btn-screenshot" type="button" title="Mevcut görünümü PNG olarak indir"><span class="icon icon-camera"></span></button>
+      </div>
+    </section>
+
+    <section id="panel-project-detail" class="panel">
       <h3 id="detail-title">Seçili Drone Projesi</h3>
       <div id="task-detail">Proje seçilmedi</div>
     </section>
 
-    <section class="panel">
+    <section id="panel-about" class="panel">
       <h3>Hakkında</h3>
       <div class="info-card" style="border-color: var(--glass-border); background: rgba(0,0,0,0.2);">
         Bu arayuz hem drone ortofoto is akisini hem de telefonla cekilmis indoor fotogrametri projelerini ayni Cesium arayuzunde yonetir.
@@ -114,7 +190,7 @@
   <div id="modal-upload" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <header>
-        <h3>Yeni Proje</h3>
+        <h3 id="drone-modal-title">Yeni Proje</h3>
         <button class="close" data-close-modal>×</button>
       </header>
       <form id="upload-form">
@@ -137,6 +213,13 @@
         <div id="project-form-content" class="project-form-content" hidden>
           <div class="project-type-switch" aria-label="Secili proje tipi">
             <span id="selected-project-type-label" class="selected-project-type-label">Santiye</span>
+            <div id="project-type-inline-switch" class="project-type-inline-switch" hidden>
+              <button type="button" data-project-use-case="construction">Santiye</button>
+              <button type="button" data-project-use-case="museum">Muze</button>
+            </div>
+          </div>
+          <div id="project-edit-note" class="info-card info-card-muted" hidden>
+            Bu modda sadece proje bilgileri guncellenir. Mevcut ortofoto ve ciktilar korunur, yeni fotograf yuklenmez.
           </div>
 
           <div class="modal-grid">
@@ -219,7 +302,7 @@
               </div>
             </section>
 
-            <section class="form-section">
+            <section id="drone-upload-section" class="form-section">
               <h4>Veri Yükleme</h4>
               <div class="field-span-full">
                 <span class="upload-label">Drone fotoğrafları (en az 5)</span>
@@ -249,7 +332,7 @@
           <div id="upload-status" class="status"></div>
           <footer>
             <button type="button" data-close-modal>İptal</button>
-            <button type="submit" class="primary">Gönder</button>
+            <button id="drone-submit-button" type="submit" class="primary">Gönder</button>
           </footer>
         </div>
       </form>
@@ -330,12 +413,42 @@
     </div>
   </div>
 
+  <!-- Not detay popup'u — haritada veya listede nota tıklanınca gösterilir -->
+  <div id="note-detail-popup" class="note-popup hidden" role="dialog" aria-label="Not detayı">
+    <div class="note-popup-inner">
+      <div class="note-popup-header">
+        <div class="note-popup-badge">
+          <span class="note-popup-cat-dot" id="note-popup-cat-dot"></span>
+          <span class="note-popup-cat-name" id="note-popup-cat-name"></span>
+        </div>
+        <button class="note-popup-close" id="btn-note-popup-close" type="button" title="Kapat">×</button>
+      </div>
+      <p class="note-popup-text" id="note-popup-text"></p>
+      <div class="note-popup-meta">
+        <div class="note-popup-row">
+          <span class="icon icon-pin"></span>
+          <span id="note-popup-coords"></span>
+        </div>
+        <div class="note-popup-row">
+          <span class="icon icon-calendar"></span>
+          <span id="note-popup-date"></span>
+        </div>
+      </div>
+      <div class="note-popup-footer">
+        <button class="note-popup-delete" id="btn-note-popup-delete" type="button">
+          <span class="icon icon-trash"></span>Sil
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
 
   <!-- ============== Scriptler ============== -->
   <script src="/js/api.js"></script>
   <script src="/js/viewer.js"></script>
   <script src="/js/measurement.js"></script>
+  <script src="/js/notes.js"></script>
   <script src="/js/toast.js"></script>
   <script src="/js/upload.js"></script>
   <script src="/js/app.js"></script>
