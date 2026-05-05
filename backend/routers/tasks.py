@@ -879,6 +879,20 @@ def _glb_rtc_center(path: Path) -> tuple[float, float, float] | None:
     return values if all(math.isfinite(value) for value in values) else None
 
 
+def _odm_glb_world_axes(
+    east_basis: tuple[float, float, float],
+    north_basis: tuple[float, float, float],
+    up_basis: tuple[float, float, float],
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    """ODM OBJ->GLB zinciri z-up veriyi koruyor; Cesium glTF'yi y-up varsayarak
+    z-up tile frame'ine ceviriyor. Root transform'u buna gore kompanse et."""
+    return (
+        east_basis,
+        tuple(-component for component in up_basis),
+        north_basis,
+    )
+
+
 def _generate_tileset_from_glb(uuid: str) -> Path | None:
     """ODM textured model GLB'sinden minimal 3D Tiles 1.1 tileset.json üretir.
 
@@ -964,9 +978,26 @@ def _generate_tileset_from_glb(uuid: str) -> Path | None:
         if _vector_dot(basis_y, raw_y) < 0.0:
             basis_y = tuple(-component for component in basis_y)
         basis_x = _vector_norm(_vector_cross(basis_y, basis_z))
-        tx = origin_ecef[0] - (basis_x[0] * rtc_center[0] + basis_y[0] * rtc_center[1] + basis_z[0] * rtc_center[2])
-        ty = origin_ecef[1] - (basis_x[1] * rtc_center[0] + basis_y[1] * rtc_center[1] + basis_z[1] * rtc_center[2])
-        tz = origin_ecef[2] - (basis_x[2] * rtc_center[0] + basis_y[2] * rtc_center[1] + basis_z[2] * rtc_center[2])
+        transform_basis_x, transform_basis_y, transform_basis_z = _odm_glb_world_axes(
+            basis_x,
+            basis_y,
+            basis_z,
+        )
+        tx = origin_ecef[0] - (
+            transform_basis_x[0] * rtc_center[0]
+            + transform_basis_y[0] * rtc_center[1]
+            + transform_basis_z[0] * rtc_center[2]
+        )
+        ty = origin_ecef[1] - (
+            transform_basis_x[1] * rtc_center[0]
+            + transform_basis_y[1] * rtc_center[1]
+            + transform_basis_z[1] * rtc_center[2]
+        )
+        tz = origin_ecef[2] - (
+            transform_basis_x[2] * rtc_center[0]
+            + transform_basis_y[2] * rtc_center[1]
+            + transform_basis_z[2] * rtc_center[2]
+        )
     else:
         native_bbox = (((stats or {}).get("bbox") or {}).get("native") or {}).get("bbox") or {}
         native_avg: dict[str, float] = {}
@@ -1010,9 +1041,30 @@ def _generate_tileset_from_glb(uuid: str) -> Path | None:
         basis_x = (-sin_lam, cos_lam, 0.0)
         basis_y = (-sin_phi * cos_lam, -sin_phi * sin_lam, cos_phi)
         basis_z = (cos_phi * cos_lam, cos_phi * sin_lam, sin_phi)
-        tx = center_ecef[0] - (basis_x[0] * (rtc_center[0] + local_center[0]) + basis_y[0] * (rtc_center[1] + local_center[1]) + basis_z[0] * (rtc_center[2] + local_center[2]))
-        ty = center_ecef[1] - (basis_x[1] * (rtc_center[0] + local_center[0]) + basis_y[1] * (rtc_center[1] + local_center[1]) + basis_z[1] * (rtc_center[2] + local_center[2]))
-        tz = center_ecef[2] - (basis_x[2] * (rtc_center[0] + local_center[0]) + basis_y[2] * (rtc_center[1] + local_center[1]) + basis_z[2] * (rtc_center[2] + local_center[2]))
+        transform_basis_x, transform_basis_y, transform_basis_z = _odm_glb_world_axes(
+            basis_x,
+            basis_y,
+            basis_z,
+        )
+        tx = center_ecef[0] - (
+            transform_basis_x[0] * (rtc_center[0] + local_center[0])
+            + transform_basis_y[0] * (rtc_center[1] + local_center[1])
+            + transform_basis_z[0] * (rtc_center[2] + local_center[2])
+        )
+        ty = center_ecef[1] - (
+            transform_basis_x[1] * (rtc_center[0] + local_center[0])
+            + transform_basis_y[1] * (rtc_center[1] + local_center[1])
+            + transform_basis_z[1] * (rtc_center[2] + local_center[2])
+        )
+        tz = center_ecef[2] - (
+            transform_basis_x[2] * (rtc_center[0] + local_center[0])
+            + transform_basis_y[2] * (rtc_center[1] + local_center[1])
+            + transform_basis_z[2] * (rtc_center[2] + local_center[2])
+        )
+
+    basis_x = transform_basis_x
+    basis_y = transform_basis_y
+    basis_z = transform_basis_z
 
     # 4×4 sütun-öncelikli dönüşüm matrisi.
     # Kolonlar sırasıyla local X, local Y, local Z eksenlerinin dünyadaki yönleridir.
