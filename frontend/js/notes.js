@@ -68,6 +68,34 @@ window.AppNotes = (() => {
 
   function init(_viewer) { viewer = _viewer; }
 
+  /* ---------- kategori picker ---------- */
+
+  function _hexToRgb(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `${r}, ${g}, ${b}`;
+  }
+
+  function _setActiveCat(cat) {
+    const color = CAT_COLORS[cat] || CAT_COLORS.not;
+    document.querySelectorAll("#note-category-picker .note-cat-btn").forEach(btn => {
+      const isActive = btn.dataset.cat === cat;
+      if (isActive) {
+        const rgb = _hexToRgb(color);
+        btn.style.background    = `rgba(${rgb}, 0.18)`;
+        btn.style.borderColor   = `rgba(${rgb}, 0.5)`;
+        btn.style.color         = color;
+      } else {
+        btn.style.background  = "";
+        btn.style.borderColor = "";
+        btn.style.color       = "";
+      }
+    });
+    const hiddenInput = document.getElementById("note-category");
+    if (hiddenInput) hiddenInput.value = cat;
+  }
+
   function bind() {
     document.getElementById("btn-add-note")?.addEventListener("click", startPickLocation);
     document.getElementById("btn-save-note")?.addEventListener("click", commitNote);
@@ -75,6 +103,12 @@ window.AppNotes = (() => {
     document.getElementById("note-text")?.addEventListener("keydown", (e) => {
       if (e.key === "Enter")  commitNote();
       if (e.key === "Escape") cancelPick();
+    });
+
+    // Kategori picker
+    _setActiveCat("not");
+    document.querySelectorAll("#note-category-picker .note-cat-btn").forEach(btn => {
+      btn.addEventListener("click", () => _setActiveCat(btn.dataset.cat));
     });
 
     document.getElementById("btn-note-popup-close")?.addEventListener("click", _closeNotePopup);
@@ -162,6 +196,7 @@ window.AppNotes = (() => {
     if (form)   form.hidden = true;
     if (status) status.textContent = "";
     if (text)   text.value = "";
+    _setActiveCat("not");
   }
 
   function commitNote() {

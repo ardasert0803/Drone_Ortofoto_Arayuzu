@@ -22,6 +22,10 @@ class Settings:
     # NodeODM
     NODEODM_HOST: str = os.getenv("NODEODM_HOST", "localhost")
     NODEODM_PORT: int = int(os.getenv("NODEODM_PORT", "3000"))
+    try:
+        MAX_GLTF_TEXTURE_SIZE: int = max(1024, int(os.getenv("MAX_GLTF_TEXTURE_SIZE", "8192")))
+    except ValueError:
+        MAX_GLTF_TEXTURE_SIZE = 8192
 
     @property
     def NODEODM_URL(self) -> str:

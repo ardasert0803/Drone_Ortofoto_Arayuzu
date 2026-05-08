@@ -50,7 +50,8 @@ window.AppMeasure = (() => {
     for (const e of active.entities)   { try { viewer.entities.remove(e); } catch {} }
     completedEntities = [];
     active = _freshActive();
-    document.querySelectorAll('.tool-row button[data-tool]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('button[data-tool]').forEach(b => b.classList.remove('active'));
+    if (resultEl) resultEl.classList.remove('recording');
     _setResult("—");
   }
 
@@ -67,7 +68,8 @@ window.AppMeasure = (() => {
     }
     _addCompletionLabel();
     _commitActive();
-    document.querySelectorAll('.tool-row button[data-tool]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('button[data-tool]').forEach(b => b.classList.remove('active'));
+    if (resultEl) resultEl.classList.remove('recording');
   }
 
   function _addCompletionLabel() {
@@ -119,7 +121,8 @@ window.AppMeasure = (() => {
 
     active = _freshActive();
     active.tool = tool;
-    document.querySelector(`.tool-row button[data-tool="${tool}"]`)?.classList.add('active');
+    document.querySelector(`button[data-tool="${tool}"]`)?.classList.add('active');
+    if (resultEl) resultEl.classList.add('recording');
 
     active.handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 
@@ -289,7 +292,7 @@ window.AppMeasure = (() => {
   }
 
   function bind() {
-    document.querySelectorAll('.tool-row button[data-tool]').forEach(btn => {
+    document.querySelectorAll('#panel-measurement button[data-tool]').forEach(btn => {
       btn.addEventListener('click', () => {
         const tool = btn.dataset.tool;
         if (tool === 'clear') {

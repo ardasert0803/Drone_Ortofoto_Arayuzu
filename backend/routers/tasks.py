@@ -8,6 +8,7 @@ NodeODM container'ı Docker'da koşar; biz sadece HTTP üzerinden konuşuruz.
 """
 from __future__ import annotations
 
+import io
 import json
 import math
 import shutil
@@ -879,6 +880,168 @@ def _glb_rtc_center(path: Path) -> tuple[float, float, float] | None:
     return values if all(math.isfinite(value) for value in values) else None
 
 
+def _read_glb_payload(path: Path) -> tuple[dict[str, Any], bytes] | None:
+    try:
+        with path.open("rb") as fh:
+            magic, _version, length = struct.unpack("<4sII", fh.read(12))
+            if magic != b"glTF":
+                return None
+
+            payload: dict[str, Any] | None = None
+            binary = b""
+            while fh.tell() < length:
+                chunk_header = fh.read(8)
+                if len(chunk_header) < 8:
+                    return None
+                chunk_length, chunk_type = struct.unpack("<I4s", chunk_header)
+                chunk_data = fh.read(chunk_length)
+                if len(chunk_data) != chunk_length:
+                    return None
+                if chunk_type == b"JSON":
+                    payload = json.loads(chunk_data.decode("utf-8"))
+                elif chunk_type == b"BIN\x00":
+                    binary = chunk_data
+    except (OSError, ValueError, struct.error, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+    if payload is None:
+        return None
+    return payload, binary
+
+
+def _write_glb_payload(path: Path, payload: dict[str, Any], binary: bytes) -> None:
+    json_chunk = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    json_chunk += b" " * ((4 - (len(json_chunk) % 4)) % 4)
+    binary += b"\x00" * ((4 - (len(binary) % 4)) % 4)
+
+    total_length = 12 + 8 + len(json_chunk) + 8 + len(binary)
+    temp_path = path.with_suffix(f"{path.suffix}.tmp")
+    with temp_path.open("wb") as fh:
+        fh.write(struct.pack("<4sII", b"glTF", 2, total_length))
+        fh.write(struct.pack("<I4s", len(json_chunk), b"JSON"))
+        fh.write(json_chunk)
+        fh.write(struct.pack("<I4s", len(binary), b"BIN\x00"))
+        fh.write(binary)
+    temp_path.replace(path)
+
+
+def _clamp_glb_embedded_textures(path: Path, max_texture_size: int) -> list[tuple[int, tuple[int, int], tuple[int, int]]]:
+    if max_texture_size <= 0 or not path.exists():
+        return []
+
+    parsed = _read_glb_payload(path)
+    if not parsed:
+        return []
+    payload, binary = parsed
+
+    try:
+        from PIL import Image
+    except ImportError:
+        print(f"[tasks] Pillow bulunamadi, GLB texture clamp atlandi: {path}")
+        return []
+    Image.MAX_IMAGE_PIXELS = None
+
+    images = payload.get("images")
+    buffer_views = payload.get("bufferViews")
+    buffers = payload.get("buffers")
+    if not isinstance(images, list) or not isinstance(buffer_views, list) or not isinstance(buffers, list) or not buffers:
+        return []
+
+    resampling = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+    replacements: dict[int, bytes] = {}
+    resized: list[tuple[int, tuple[int, int], tuple[int, int]]] = []
+
+    for image_index, image in enumerate(images):
+        if not isinstance(image, dict):
+            continue
+        buffer_view_index = image.get("bufferView")
+        mime_type = str(image.get("mimeType") or "").lower()
+        if not isinstance(buffer_view_index, int) or mime_type not in {"image/jpeg", "image/png"}:
+            continue
+        if buffer_view_index < 0 or buffer_view_index >= len(buffer_views):
+            continue
+
+        buffer_view = buffer_views[buffer_view_index]
+        if not isinstance(buffer_view, dict):
+            continue
+        byte_offset = int(buffer_view.get("byteOffset", 0) or 0)
+        byte_length = int(buffer_view.get("byteLength", 0) or 0)
+        if byte_length <= 0:
+            continue
+        image_bytes = binary[byte_offset:byte_offset + byte_length]
+        if len(image_bytes) != byte_length:
+            continue
+
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as texture:
+                width, height = texture.size
+                if max(width, height) <= max_texture_size:
+                    continue
+
+                scale = max_texture_size / float(max(width, height))
+                resized_size = (
+                    max(1, int(round(width * scale))),
+                    max(1, int(round(height * scale))),
+                )
+                texture = texture.resize(resized_size, resampling)
+
+                encoded = io.BytesIO()
+                if mime_type == "image/jpeg":
+                    if texture.mode not in {"RGB", "L"}:
+                        texture = texture.convert("RGB")
+                    texture.save(encoded, format="JPEG", quality=90, optimize=True)
+                else:
+                    if texture.mode not in {"RGB", "RGBA", "L", "LA", "P"}:
+                        texture = texture.convert("RGBA")
+                    texture.save(encoded, format="PNG", optimize=True)
+
+                replacements[buffer_view_index] = encoded.getvalue()
+                resized.append((image_index, (width, height), resized_size))
+        except Exception as exc:
+            print(f"[tasks] Texture clamp basarisiz ({path.name}, image={image_index}): {exc!r}")
+
+    if not replacements:
+        return []
+
+    rebuilt = bytearray()
+    for index, buffer_view in enumerate(buffer_views):
+        if not isinstance(buffer_view, dict):
+            continue
+        if rebuilt:
+            rebuilt.extend(b"\x00" * ((4 - (len(rebuilt) % 4)) % 4))
+
+        byte_offset = int(buffer_view.get("byteOffset", 0) or 0)
+        byte_length = int(buffer_view.get("byteLength", 0) or 0)
+        chunk = replacements.get(index, binary[byte_offset:byte_offset + byte_length])
+        buffer_view["byteOffset"] = len(rebuilt)
+        buffer_view["byteLength"] = len(chunk)
+        rebuilt.extend(chunk)
+
+    if isinstance(buffers[0], dict):
+        buffers[0]["byteLength"] = len(rebuilt)
+
+    _write_glb_payload(path, payload, bytes(rebuilt))
+    print(
+        f"[tasks] GLB texture clamp uygulandi: {path.name} "
+        f"({', '.join(f'#{idx}:{old[0]}x{old[1]}->{new[0]}x{new[1]}' for idx, old, new in resized)})"
+    )
+    return resized
+
+
+def _clamp_output_glbs(uuid: str) -> None:
+    max_texture_size = settings.MAX_GLTF_TEXTURE_SIZE
+    if max_texture_size <= 0:
+        return
+
+    candidates = [
+        _output_dir(uuid) / "odm_texturing" / "odm_textured_model_geo.glb",
+        _output_dir(uuid) / "3d_tiles" / "content.glb",
+    ]
+    for path in candidates:
+        if path.exists():
+            _clamp_glb_embedded_textures(path, max_texture_size)
+
+
 def _odm_glb_world_axes(
     east_basis: tuple[float, float, float],
     north_basis: tuple[float, float, float],
@@ -903,6 +1066,7 @@ def _generate_tileset_from_glb(uuid: str) -> Path | None:
     source_glb = _find_first(uuid, "odm_textured_model_geo.glb")
     if not source_glb or not source_glb.exists():
         return None
+    _clamp_glb_embedded_textures(source_glb, settings.MAX_GLTF_TEXTURE_SIZE)
     obj = _find_first(uuid, "odm_textured_model_geo.obj")
 
     info_path = _find_georeference_info(uuid)
@@ -1169,6 +1333,7 @@ def _ensure_best_tileset(uuid: str) -> Path | None:
         return archive_tileset
 
     if existing and _tileset_looks_like_glb_fallback(existing):
+        _clamp_output_glbs(uuid)
         if not _glb_tileset_is_stale(uuid, existing):
             return existing
         regenerated = _generate_tileset_from_glb(uuid)
@@ -1378,6 +1543,7 @@ async def fetch_outputs(uuid: str) -> dict[str, Any]:
     except BadZipFile as exc:
         raise HTTPException(502, "NodeODM all.zip geçerli bir zip değil") from exc
 
+    _clamp_output_glbs(uuid)
     orthophoto = _ensure_orthophoto_alias(uuid)
     orthophoto_tiles = _ensure_orthophoto_tiles(uuid)
     orthophoto_preview = _find_orthophoto_preview(uuid)

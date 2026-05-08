@@ -8,6 +8,8 @@
   <!-- CesiumJS (CDN) -->
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.121/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.121/Build/Cesium/Cesium.js"></script>
+  <!-- Fabric.js — canvas anotasyon -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
 
   <link rel="stylesheet" href="/css/style.css" />
 </head>
@@ -122,16 +124,35 @@
 
     <section id="panel-measurement" class="panel" hidden>
       <h3 id="measurement-title">Ölçüm Araçları</h3>
-      <div class="tool-row">
-        <button data-tool="distance"><span class="icon icon-ruler"></span>Mesafe</button>
-        <button data-tool="area"><span class="icon icon-polygon"></span>Alan</button>
-        <button data-tool="height"><span class="icon icon-height"></span>Yükseklik</button>
-        <button data-tool="slope"><span class="icon icon-slope"></span>Eğim</button>
-        <button data-tool="coordinate"><span class="icon icon-location"></span>Koordinat</button>
-        <button data-tool="clear" class="danger"><span class="icon icon-trash"></span>Temizle</button>
+      <div class="tool-row measure-tools-grid">
+        <button data-tool="distance">
+          <span class="icon icon-ruler"></span>
+          <span>Mesafe</span>
+        </button>
+        <button data-tool="area">
+          <span class="icon icon-polygon"></span>
+          <span>Alan</span>
+        </button>
+        <button data-tool="height">
+          <span class="icon icon-height"></span>
+          <span>Yükseklik</span>
+        </button>
+        <button data-tool="slope">
+          <span class="icon icon-slope"></span>
+          <span>Eğim</span>
+        </button>
+        <button data-tool="coordinate">
+          <span class="icon icon-location"></span>
+          <span>Koordinat</span>
+        </button>
       </div>
-      <div id="measurement-result" class="result">—</div>
-      <button id="btn-copy-measurement" class="secondary" type="button" hidden>Kopyala</button>
+      <div class="measure-result-wrap">
+        <div id="measurement-result" class="result">—</div>
+        <div class="measure-result-bar">
+          <button id="btn-copy-measurement" class="secondary" type="button" hidden>Kopyala</button>
+          <button data-tool="clear" class="danger tool-row measure-clear-btn"><span class="icon icon-trash"></span>Temizle</button>
+        </div>
+      </div>
       <div class="measurement-disclaimer">
         ⚠ Ölçümler yaklaşık değer sunar; gerçek değerleri tam yansıtmayabilir. Kritik iş kararlarında profesyonel arazi ölçümü yapınız.
       </div>
@@ -144,12 +165,25 @@
 
       <div id="note-form" class="note-form" hidden>
         <div id="note-pick-status" class="note-pick-status"></div>
-        <select id="note-category" class="note-category-select">
-          <option value="not">— Not</option>
-          <option value="sorun">— Sorun</option>
-          <option value="ilerleme">— İlerleme</option>
-          <option value="tehlike">— Tehlike</option>
-        </select>
+        <div class="note-cat-picker" id="note-category-picker" role="group" aria-label="Not türü">
+          <button type="button" class="note-cat-btn" data-cat="not">
+            <span class="icon icon-pin"></span>
+            <span>Not</span>
+          </button>
+          <button type="button" class="note-cat-btn" data-cat="sorun">
+            <span class="icon icon-alert-tri"></span>
+            <span>Sorun</span>
+          </button>
+          <button type="button" class="note-cat-btn" data-cat="ilerleme">
+            <span class="icon icon-check-circ"></span>
+            <span>İlerleme</span>
+          </button>
+          <button type="button" class="note-cat-btn" data-cat="tehlike">
+            <span class="icon icon-alert-oct"></span>
+            <span>Tehlike</span>
+          </button>
+        </div>
+        <input type="hidden" id="note-category" value="not" />
         <input type="text" id="note-text" class="note-text-input" placeholder="Açıklama girin..." maxlength="120" />
         <div class="note-form-actions">
           <button id="btn-save-note" type="button" class="primary">Kaydet</button>
@@ -164,12 +198,23 @@
 
     <!-- Şantiye moduna özel saha özeti + aksiyon paneli -->
     <section id="panel-site-info" class="panel" hidden>
-      <h3>Saha Özeti</h3>
+      <div class="site-info-hd">
+        <h3>Saha Özeti</h3>
+        <span id="site-status-pill" class="site-status-pill"></span>
+      </div>
       <div id="site-info-content" class="site-info-content"></div>
-      <div class="panel-actions">
-        <button id="btn-constr-fly" type="button"><span class="icon icon-navigation"></span>Sahaya Uç</button>
-        <button id="btn-constr-refresh" type="button"><span class="icon icon-refresh"></span>Yenile</button>
-        <button id="btn-screenshot" type="button" title="Mevcut görünümü PNG olarak indir"><span class="icon icon-camera"></span></button>
+      <button id="btn-constr-fly" type="button" class="primary site-fly-btn">
+        <span class="icon icon-navigation"></span>Sahaya Uç
+      </button>
+      <div class="site-secondary-actions">
+        <button id="btn-constr-refresh" type="button" class="site-sec-btn">
+          <span class="icon icon-refresh"></span>
+          <span>Yenile</span>
+        </button>
+        <button id="btn-screenshot" type="button" class="site-sec-btn" title="Mevcut görünümü PNG olarak indir">
+          <span class="icon icon-camera"></span>
+          <span>Ekran Görüntüsü</span>
+        </button>
       </div>
     </section>
 
@@ -442,10 +487,140 @@
     </div>
   </div>
 
+  <!-- ============== Sunum Modu Overlay ============== -->
+  <div id="modal-presentation" class="pres-overlay hidden" role="dialog" aria-modal="true" aria-label="Sunum Modu">
+
+    <!-- Top HUD bar — kontroller -->
+    <div class="pres-topbar">
+      <div class="pres-topbar-left">
+        <span class="icon icon-presentation pres-topbar-icon"></span>
+        <span class="pres-topbar-label">Sunum Modu</span>
+        <span class="pres-topbar-sep">·</span>
+        <span id="pres-museum-name-topbar" class="pres-topbar-museum"></span>
+      </div>
+      <div class="pres-topbar-right">
+        <button id="btn-pres-pause" class="pres-ctrl-btn" type="button" title="Duraklat">
+          <span class="icon icon-player-pause pres-ctrl-icon" id="pres-pause-icon"></span>
+        </button>
+        <button id="btn-pres-close" class="pres-ctrl-btn pres-ctrl-close" type="button" title="Kapat (Esc)">
+          <span class="icon icon-x pres-ctrl-icon"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Şeffaf orta alan — Cesium / ortofoto burada görünür -->
+    <div class="pres-spacer"></div>
+
+    <!-- Alt bilgi alanı — kartlar + navigasyon -->
+    <div class="pres-card-area">
+      <div id="pres-card-wrap" class="pres-card-wrap"></div>
+      <div class="pres-footer">
+        <button id="btn-pres-prev" class="pres-nav-btn" type="button" aria-label="Önceki slayt">‹</button>
+        <div id="pres-dots" class="pres-dots"></div>
+        <button id="btn-pres-next" class="pres-nav-btn" type="button" aria-label="Sonraki slayt">›</button>
+      </div>
+    </div>
+
+    <!-- Progress strip -->
+    <div class="pres-progress-track">
+      <div id="pres-progress-fill" class="pres-progress-fill"></div>
+    </div>
+  </div>
+
+  <!-- ============== Ekran görüntüsü anotasyon modalı ============== -->
+  <div id="modal-annotate" class="annotate-overlay hidden" role="dialog" aria-modal="true" aria-label="Ekran görüntüsü notlandırma">
+    <div class="annotate-ui">
+
+      <!-- Toolbar -->
+      <div class="annotate-toolbar" role="toolbar">
+
+        <!-- Araçlar -->
+        <div class="annotate-tool-group">
+          <button class="annotate-tool-btn active" data-tool="select" title="Seçim (V)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-7 1-4 7L5 3z"/></svg>
+          </button>
+          <button class="annotate-tool-btn" data-tool="pen" title="Kalem (P)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+          </button>
+          <button class="annotate-tool-btn" data-tool="arrow" title="Ok (A)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
+          </button>
+          <button class="annotate-tool-btn" data-tool="rect" title="Dikdörtgen (R)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          </button>
+          <button class="annotate-tool-btn" data-tool="circle" title="Daire/Elips (C)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+          </button>
+          <button class="annotate-tool-btn" data-tool="text" title="Metin (T)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+          </button>
+        </div>
+
+        <div class="annotate-toolbar-sep"></div>
+
+        <!-- Renk + kalınlık -->
+        <div class="annotate-tool-group annotate-style-group">
+          <div class="annotate-color-presets">
+            <button class="annotate-preset-color" data-color="#f85149" style="background:#f85149" title="Kırmızı"></button>
+            <button class="annotate-preset-color" data-color="#f59e0b" style="background:#f59e0b" title="Turuncu"></button>
+            <button class="annotate-preset-color" data-color="#3fb950" style="background:#3fb950" title="Yeşil"></button>
+            <button class="annotate-preset-color" data-color="#4f9eff" style="background:#4f9eff" title="Mavi"></button>
+            <button class="annotate-preset-color" data-color="#ffffff" style="background:#fff;border-color:rgba(255,255,255,0.4)" title="Beyaz"></button>
+            <button class="annotate-preset-color" data-color="#111111" style="background:#111;border-color:rgba(255,255,255,0.15)" title="Siyah"></button>
+          </div>
+          <label class="annotate-color-label" title="Özel renk">
+            <input type="color" id="annotate-color" value="#f85149" />
+            <span id="annotate-color-preview" class="annotate-color-preview" style="background:#f85149"></span>
+          </label>
+          <div class="annotate-width-wrap">
+            <input type="range" id="annotate-width" min="1" max="14" value="3" class="annotate-width-slider" />
+            <span id="annotate-width-val" class="annotate-width-val">3</span>
+          </div>
+        </div>
+
+        <div class="annotate-toolbar-sep"></div>
+
+        <!-- Geri al / sil -->
+        <div class="annotate-tool-group">
+          <button id="btn-annotate-undo" class="annotate-tool-btn" title="Geri al (Ctrl+Z)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+          </button>
+          <button id="btn-annotate-delete" class="annotate-tool-btn" title="Seçili sil (Del)">
+            <span class="icon icon-trash"></span>
+          </button>
+          <button id="btn-annotate-clear" class="annotate-tool-btn" title="Tüm notları temizle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
+        </div>
+
+        <!-- spacer -->
+        <span class="annotate-toolbar-spacer"></span>
+
+        <!-- İndir + kapat -->
+        <div class="annotate-tool-group">
+          <button id="btn-annotate-download" class="annotate-tool-btn annotate-btn-primary" type="button">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            İndir
+          </button>
+          <button id="btn-annotate-close" class="annotate-tool-btn annotate-btn-close" type="button" title="Kapat (Esc)">×</button>
+        </div>
+
+      </div>
+
+      <!-- Canvas alanı -->
+      <div class="annotate-canvas-area" id="annotate-canvas-area">
+        <canvas id="annotate-canvas"></canvas>
+      </div>
+
+    </div>
+  </div>
+
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
 
   <!-- ============== Scriptler ============== -->
   <script src="/js/api.js"></script>
+  <script src="/js/annotate.js"></script>
+  <script src="/js/presentation.js"></script>
   <script src="/js/viewer.js"></script>
   <script src="/js/measurement.js"></script>
   <script src="/js/notes.js"></script>

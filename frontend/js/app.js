@@ -187,18 +187,14 @@
   AppMeasure.bind();
   AppNotes.init(viewer);
   AppNotes.bind();
+  AppAnnotate.bind();
+  AppPresentation.bind();
 
   document.getElementById("btn-screenshot").addEventListener("click", () => {
     try {
       viewer.render();
-      const canvas = viewer.canvas;
-      const dataUrl = canvas.toDataURL("image/png");
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      const now = new Date();
-      const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}_${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
-      a.download = `santiye_${ts}.png`;
-      a.click();
+      const dataUrl = viewer.canvas.toDataURL("image/png");
+      AppAnnotate.open(dataUrl);
     } catch {
       AppToast.show("Ekran görüntüsü alınamadı.", { tone: "error" });
     }
@@ -332,11 +328,21 @@
           </div>
         </section>
         ${museumCards}
+        <button id="btn-presentation-mode" class="pres-launch-btn" type="button">
+          <span class="icon icon-presentation pres-launch-icon"></span>
+          <div class="pres-launch-text">
+            <span class="pres-launch-title">Sunum Modunu Başlat</span>
+            <span class="pres-launch-sub">3D model etrafında dönerek müzeyi sergile</span>
+          </div>
+        </button>
         ${droneActionsMarkup()}
       </div>
     `;
 
     bindDroneActions(project);
+    document.getElementById("btn-presentation-mode")?.addEventListener("click", () => {
+      AppPresentation.open(project, project.uuid);
+    });
   }
 
   function droneActionsMarkup() {
@@ -587,13 +593,38 @@
     AppNotes.clearProject();
   }
 
+  function _siteInfoCard(label, value, iconClass) {
+    return `
+      <div class="site-mini-card">
+        <span class="icon ${escapeHtml(iconClass)} site-mini-icon" aria-hidden="true"></span>
+        <div class="site-mini-body">
+          <span class="site-mini-label">${escapeHtml(label)}</span>
+          <b class="site-mini-value">${escapeHtml(value)}</b>
+        </div>
+      </div>`;
+  }
+
   function renderSiteInfoPanel(project) {
-    const rows = [
-      project.location     ? `<div class="site-row"><span>Konum</span><b>${escapeHtml(project.location)}</b></div>` : "",
-      project.capture_date ? `<div class="site-row"><span>Çekim tarihi</span><b>${escapeHtml(project.capture_date)}</b></div>` : "",
-      project.description  ? `<div class="site-row stacked"><span>Notlar</span><b>${escapeHtml(project.description)}</b></div>` : "",
+    // Status pill
+    const statusPill = document.getElementById("site-status-pill");
+    if (statusPill) {
+      const toneMap = { COMPLETED: "ok", RUNNING: "warn", FAILED: "danger", QUEUED: "info" };
+      const labelMap = { COMPLETED: "Tamamlandı", RUNNING: "İşleniyor", FAILED: "Hata", QUEUED: "Kuyrukta" };
+      statusPill.textContent = labelMap[project.status_text] || project.status_text || "—";
+      statusPill.className = `site-status-pill ${toneMap[project.status_text] || ""}`;
+    }
+
+    // Mini kartlar + açıklama
+    const cards = [
+      project.location     ? _siteInfoCard("Konum", project.location, "icon-pin") : "",
+      project.capture_date ? _siteInfoCard("Çekim", project.capture_date, "icon-calendar") : "",
     ].join("");
-    dom.siteInfoContent.innerHTML = rows || `<span class="muted">Saha bilgisi girilmedi.</span>`;
+
+    const desc = project.description
+      ? `<div class="site-desc-block"><span class="site-desc-label">Notlar</span><p class="site-desc-text">${escapeHtml(project.description)}</p></div>`
+      : "";
+
+    dom.siteInfoContent.innerHTML = (cards + desc) || `<p class="site-empty-note">Saha bilgisi girilmedi.</p>`;
 
     document.getElementById("btn-constr-fly").onclick = async () => {
       const hasBounds = await hydrateDroneBounds(project.uuid);
@@ -849,6 +880,7 @@
     dom.projectDetail.textContent = "Proje seçilmedi";
     if (dom.detailTitle) dom.detailTitle.textContent = "Seçili Drone Projesi";
     renderProjectList(currentProjects());
+    AppViewer.flyToHome({ duration: 1.8 });
   });
 
   // Şantiye katman paneli event listenerları — drone panel ile senkron
