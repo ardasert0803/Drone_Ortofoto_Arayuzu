@@ -39,6 +39,7 @@
       indoor: null,
     },
     fetchingDroneOutputs: new Set(),
+    tilesetEditing: null,
   };
 
   const dom = {
@@ -71,6 +72,12 @@
     projectDetailPanel: document.getElementById("panel-project-detail"),
     aboutPanel: document.getElementById("panel-about"),
     notesPanel: document.getElementById("panel-quick-notes"),
+    tilesetEditHud: document.getElementById("tileset-edit-hud"),
+    tilesetEditTitle: document.getElementById("tileset-edit-title"),
+    tilesetEditSubtitle: document.getElementById("tileset-edit-subtitle"),
+    tilesetEditSave: document.getElementById("btn-tileset-edit-save"),
+    tilesetEditCancel: document.getElementById("btn-tileset-edit-cancel"),
+    tilesetEditReset: document.getElementById("btn-tileset-edit-reset"),
   };
 
   function escapeHtml(value) {
@@ -92,6 +99,19 @@
 
   function currentProjects() {
     return state.projects[state.mode];
+  }
+
+  function findDroneProject(uuid) {
+    return state.projects.drone.find((project) => project.uuid === uuid) || null;
+  }
+
+  function upsertDroneProject(project) {
+    const index = state.projects.drone.findIndex((entry) => entry.uuid === project.uuid);
+    if (index >= 0) {
+      state.projects.drone.splice(index, 1, project);
+    } else {
+      state.projects.drone.unshift(project);
+    }
   }
 
   function selectedUuid(mode = state.mode) {
@@ -148,6 +168,9 @@
   }
 
   function setMode(mode, options = {}) {
+    if (state.tilesetEditing && options.preserveTilesetEditor !== true) {
+      void closeTilesetPlacementEditor({restoreOriginal: true, silent: true});
+    }
     state.mode = mode === "indoor" ? "indoor" : "drone";
     const meta = modeMeta[state.mode];
     dom.projectHeading.textContent = meta.heading;
@@ -350,6 +373,7 @@
       <div class="actions">
         <button id="btn-fetch">Ortofotoyu hazirla</button>
         <button id="btn-fly">Buraya uc</button>
+        <button id="btn-edit-tileset">3D Yerlestir</button>
         <button id="btn-debug-tileset">3D Debug</button>
         <button id="btn-edit-drone">Duzenle</button>
         <button id="btn-delete-drone" class="danger">Sil</button>
@@ -370,6 +394,9 @@
           AppToast.show("Bu proje icin ucus konumu bulunamadi.", {tone: "info"});
         }
       }
+    };
+    document.getElementById("btn-edit-tileset").onclick = () => {
+      void openTilesetPlacementEditor(project);
     };
     document.getElementById("btn-debug-tileset").onclick = async () => {
       if (project.status_text === "COMPLETED") {
@@ -638,6 +665,21 @@
     document.getElementById("btn-constr-refresh").onclick = () => {
       void fetchAndLoadDroneProject(project.uuid);
     };
+    document.getElementById("btn-constr-tileset-edit").onclick = () => {
+      void openTilesetPlacementEditor(project);
+    };
+  }
+
+  function setTilesetEditHud(project) {
+    if (!dom.tilesetEditHud) return;
+    dom.tilesetEditTitle.textContent = `3D Yerlestirme · ${project.name || project.uuid.slice(0, 8)}`;
+    dom.tilesetEditSubtitle.textContent = "Oklar ve yaw etiketleri ile modeli duzenle. Basili tutarsan hizli ilerler.";
+    dom.tilesetEditHud.hidden = false;
+  }
+
+  function clearTilesetEditHud() {
+    if (!dom.tilesetEditHud) return;
+    dom.tilesetEditHud.hidden = true;
   }
 
   function syncProjectPanels(project = null) {
@@ -713,6 +755,8 @@
 
   async function ensureDroneOutputs(uuid, autoFly = true) {
     if (state.fetchingDroneOutputs.has(uuid)) return true;
+    const project = findDroneProject(uuid);
+    const adjustment = project?.tileset_adjustment || null;
 
     let hasOrtho = false;
     let hasTiles = false;
@@ -727,7 +771,7 @@
     try {
       const tileset = await API.tilesetUrl(uuid);
       if (tileset.url) {
-        await AppViewer.loadTileset(tileset.url, uuid, {pipeline: "drone"});
+        await AppViewer.loadTileset(tileset.url, uuid, {pipeline: "drone", adjustment});
         hasTiles = true;
       }
     } catch (error) {
@@ -745,6 +789,8 @@
   }
 
   async function tryLoadDroneOutputs(uuid, autoFly = true) {
+    const project = findDroneProject(uuid);
+    const adjustment = project?.tileset_adjustment || null;
     let loaded = false;
     try {
       const orthophoto = await API.orthoUrl(uuid);
@@ -756,7 +802,7 @@
     try {
       const tileset = await API.tilesetUrl(uuid);
       if (tileset.url) {
-        await AppViewer.loadTileset(tileset.url, uuid, {pipeline: "drone", forceReload: true});
+        await AppViewer.loadTileset(tileset.url, uuid, {pipeline: "drone", forceReload: true, adjustment});
         loaded = true;
       }
     } catch (error) {
@@ -781,6 +827,9 @@
   }
 
   async function selectProject(project, options = {}) {
+    if (state.tilesetEditing?.uuid && state.tilesetEditing.uuid !== project.uuid) {
+      await closeTilesetPlacementEditor({restoreOriginal: true, silent: true});
+    }
     state.selected[state.mode] = project.uuid;
     if (options.updateUrl !== false) {
       writeRouteState(state.mode, project.uuid, {replace: options.replaceUrl === true});
@@ -813,6 +862,88 @@
     if (project.status_text === "COMPLETED") {
       await ensureIndoorOutputs(project.uuid, options.autoFly !== false);
     }
+  }
+
+  async function openTilesetPlacementEditor(project) {
+    if (!project || project.status_text !== "COMPLETED") {
+      AppToast.show("3D yerlestirme icin proje once tamamlanmis olmali.", {tone: "info"});
+      return;
+    }
+    if (state.tilesetEditing?.uuid && state.tilesetEditing.uuid !== project.uuid) {
+      await closeTilesetPlacementEditor({restoreOriginal: true, silent: true});
+    }
+    if (state.tilesetEditing?.uuid === project.uuid) {
+      AppToast.show("3D yerlestirme modu zaten acik.", {tone: "info"});
+      return;
+    }
+    const loaded = await ensureDroneOutputs(project.uuid, false);
+    if (!loaded && !AppViewer.getTilesetDebugInfo(project.uuid, "drone")) {
+      AppToast.show("Bu proje icin 3D tiles bulunamadi.", {tone: "error", duration: 4200});
+      return;
+    }
+    const originalAdjustment = project.tileset_adjustment || null;
+    const started = AppViewer.startTilesetAdjustmentEditor(project.uuid, {
+      pipeline: "drone",
+      adjustment: originalAdjustment,
+    });
+    if (!started) {
+      AppToast.show("3D yerlestirme modu baslatilamadi.", {tone: "error"});
+      return;
+    }
+    state.tilesetEditing = {
+      uuid: project.uuid,
+      pipeline: "drone",
+      originalAdjustment,
+      project,
+    };
+    setTilesetEditHud(project);
+    AppToast.show("3D yerlestirme modu acildi.", {tone: "success", duration: 2200});
+  }
+
+  async function saveTilesetAdjustment(project, adjustment, context = {}) {
+    const updated = await API.updateProject(project.uuid, {
+      tileset_adjustment: adjustment,
+    });
+    const nextProject = {
+      ...project,
+      ...updated,
+      tileset_adjustment: updated.tileset_adjustment || null,
+    };
+    upsertDroneProject(nextProject);
+    AppViewer.setTilesetAdjustment(project.uuid, nextProject.tileset_adjustment || null, context.pipeline || "drone");
+    if (state.selected.drone === project.uuid) {
+      await selectProject(nextProject, {autoFly: false, updateUrl: false});
+    } else {
+      renderProjectList(currentProjects());
+    }
+    AppToast.show("3D model yerlestirmesi kaydedildi.", {tone: "success"});
+    return nextProject;
+  }
+
+  async function closeTilesetPlacementEditor(options = {}) {
+    const editing = state.tilesetEditing;
+    if (!editing) return;
+    if (options.restoreOriginal) {
+      AppViewer.setTilesetAdjustment(editing.uuid, editing.originalAdjustment || null, editing.pipeline);
+    }
+    AppViewer.stopTilesetAdjustmentEditor();
+    state.tilesetEditing = null;
+    clearTilesetEditHud();
+    if (!options.silent) {
+      AppToast.show(options.restoreOriginal ? "3D yerlestirme iptal edildi." : "3D yerlestirme modu kapatildi.", {tone: "info"});
+    }
+  }
+
+  async function saveActiveTilesetPlacement() {
+    const editing = state.tilesetEditing;
+    if (!editing) return;
+    const project = findDroneProject(editing.uuid) || editing.project;
+    const adjustment = AppViewer.getTilesetAdjustment(editing.uuid, editing.pipeline);
+    const updated = await saveTilesetAdjustment(project, adjustment, {pipeline: editing.pipeline});
+    AppViewer.stopTilesetAdjustmentEditor();
+    state.tilesetEditing = null;
+    clearTilesetEditHud();
+    return updated;
   }
 
   async function refreshDroneProjects() {
@@ -874,6 +1005,9 @@
   });
 
   document.getElementById("btn-back-to-projects").addEventListener("click", () => {
+    if (state.tilesetEditing) {
+      void closeTilesetPlacementEditor({restoreOriginal: true, silent: true});
+    }
     exitConstructionMode();
     state.selected.drone = null;
     writeRouteState(state.mode, null);
@@ -895,6 +1029,31 @@
   document.getElementById("opacity-ortho-constr").addEventListener("input", (e) => {
     document.getElementById("opacity-orthophoto").value = e.target.value;
     AppViewer.setOrthoOpacity(e.target.value);
+  });
+  dom.tilesetEditSave?.addEventListener("click", () => {
+    void saveActiveTilesetPlacement();
+  });
+  dom.tilesetEditCancel?.addEventListener("click", () => {
+    void closeTilesetPlacementEditor({restoreOriginal: true});
+  });
+  dom.tilesetEditReset?.addEventListener("click", () => {
+    const editing = state.tilesetEditing;
+    if (!editing) return;
+    AppViewer.setTilesetAdjustment(editing.uuid, null, editing.pipeline);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (!state.tilesetEditing) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      void closeTilesetPlacementEditor({restoreOriginal: true});
+    } else if (
+      (event.key === "Enter" && (event.ctrlKey || event.metaKey))
+      || (event.key.toLowerCase() === "s" && (event.ctrlKey || event.metaKey))
+    ) {
+      if (event.target && /input|textarea|select/i.test(event.target.tagName || "")) return;
+      event.preventDefault();
+      void saveActiveTilesetPlacement();
+    }
   });
 
   AppUpload.bind({

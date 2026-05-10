@@ -69,11 +69,22 @@ class TaskSummary(BaseModel):
     ticket_access: str | None = None
     collection_theme: str | None = None
     curator_contact: str | None = None
+    tileset_adjustment: dict[str, float] | None = None
 
 
 class TaskCreated(BaseModel):
     uuid: str
     images_uploaded: int
+
+
+class TilesetAdjustment(BaseModel):
+    east_meters: float = 0.0
+    north_meters: float = 0.0
+    up_meters: float = 0.0
+    heading_degrees: float = 0.0
+    pitch_degrees: float = 0.0
+    roll_degrees: float = 0.0
+    scale: float = 1.0
 
 
 class TaskMetadataUpdate(BaseModel):
@@ -93,6 +104,7 @@ class TaskMetadataUpdate(BaseModel):
     ticket_access: str | None = None
     collection_theme: str | None = None
     curator_contact: str | None = None
+    tileset_adjustment: TilesetAdjustment | None = None
 
 
 # NodeODM status code'larını okunaklı hale getir
@@ -108,6 +120,48 @@ _STATUS_TEXT = {
 
 def _museum_metadata_values(metadata: dict[str, Any]) -> dict[str, Any]:
     return {field: metadata.get(field) for field in _MUSEUM_FIELDS}
+
+
+def _normalize_tileset_adjustment(value: TilesetAdjustment | dict[str, Any] | None) -> dict[str, float] | None:
+    if value is None:
+        return None
+
+    raw = value.model_dump() if isinstance(value, TilesetAdjustment) else value
+    if not isinstance(raw, dict):
+      raise HTTPException(400, "tileset_adjustment nesne olmalı")
+
+    defaults = {
+        "east_meters": 0.0,
+        "north_meters": 0.0,
+        "up_meters": 0.0,
+        "heading_degrees": 0.0,
+        "pitch_degrees": 0.0,
+        "roll_degrees": 0.0,
+        "scale": 1.0,
+    }
+    normalized: dict[str, float] = {}
+    for key, default in defaults.items():
+        candidate = raw.get(key, default)
+        try:
+            normalized[key] = float(candidate)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, f"tileset_adjustment.{key} sayısal olmalı") from exc
+
+    if not math.isfinite(normalized["scale"]) or normalized["scale"] <= 0.0:
+        raise HTTPException(400, "tileset_adjustment.scale sıfırdan büyük olmalı")
+    if normalized["scale"] < 0.01 or normalized["scale"] > 100.0:
+        raise HTTPException(400, "tileset_adjustment.scale 0.01 ile 100 arasında olmalı")
+
+    is_identity = (
+        abs(normalized["east_meters"]) < 1e-9
+        and abs(normalized["north_meters"]) < 1e-9
+        and abs(normalized["up_meters"]) < 1e-9
+        and abs(normalized["heading_degrees"]) < 1e-9
+        and abs(normalized["pitch_degrees"]) < 1e-9
+        and abs(normalized["roll_degrees"]) < 1e-9
+        and abs(normalized["scale"] - 1.0) < 1e-9
+    )
+    return None if is_identity else normalized
 
 
 def _summarize(info: dict[str, Any]) -> TaskSummary:
@@ -128,6 +182,7 @@ def _summarize(info: dict[str, Any]) -> TaskSummary:
         capture_date=metadata.get("capture_date"),
         description=metadata.get("description"),
         **_museum_metadata_values(metadata),
+        tileset_adjustment=metadata.get("tileset_adjustment"),
     )
 
 
@@ -199,6 +254,7 @@ def _local_task_summary(uuid: str) -> TaskSummary | None:
         capture_date=metadata.get("capture_date"),
         description=metadata.get("description"),
         **_museum_metadata_values(metadata),
+        tileset_adjustment=metadata.get("tileset_adjustment"),
     )
 
 
@@ -492,6 +548,11 @@ async def update_task(uuid: str, payload: TaskMetadataUpdate) -> TaskSummary:
         collection_theme=payload.collection_theme if payload.collection_theme is not None else metadata.get("collection_theme"),
         curator_contact=payload.curator_contact if payload.curator_contact is not None else metadata.get("curator_contact"),
     )
+    tileset_adjustment = _normalize_tileset_adjustment(
+        payload.tileset_adjustment
+        if payload.tileset_adjustment is not None
+        else metadata.get("tileset_adjustment")
+    )
     if not normalized["name"]:
         raise HTTPException(400, "Proje adi zorunlu")
 
@@ -500,6 +561,7 @@ async def update_task(uuid: str, payload: TaskMetadataUpdate) -> TaskSummary:
         "date_created": metadata.get("date_created") or (info or {}).get("dateCreated"),
         "pipeline_profile": metadata.get("pipeline_profile"),
         "local_upload_dir": metadata.get("local_upload_dir"),
+        "tileset_adjustment": tileset_adjustment,
     }
     _write_metadata(uuid, {**preserved, **normalized})
 
@@ -797,6 +859,24 @@ def _geodetic_to_ecef(lat_radians: float, lon_radians: float, height: float) -> 
     )
 
 
+def _ecef_to_geodetic(x: float, y: float, z: float) -> tuple[float, float, float]:
+    a = 6378137.0
+    e2 = 0.00669437999014
+    b = a * math.sqrt(1.0 - e2)
+    ep2 = (a * a - b * b) / (b * b)
+    p = math.hypot(x, y)
+    theta = math.atan2(a * z, b * p)
+    lon = math.atan2(y, x)
+    lat = math.atan2(
+        z + ep2 * b * math.sin(theta) ** 3,
+        p - e2 * a * math.cos(theta) ** 3,
+    )
+    sin_lat = math.sin(lat)
+    n_val = a / math.sqrt(1.0 - e2 * sin_lat * sin_lat)
+    height = p / max(math.cos(lat), 1e-12) - n_val
+    return lat, lon, height
+
+
 def _vector_norm(vector: tuple[float, float, float]) -> tuple[float, float, float]:
     magnitude = math.sqrt(sum(component * component for component in vector))
     if magnitude == 0:
@@ -878,6 +958,31 @@ def _glb_rtc_center(path: Path) -> tuple[float, float, float] | None:
     except (TypeError, ValueError):
         return None
     return values if all(math.isfinite(value) for value in values) else None
+
+
+def _glb_local_center(path: Path) -> tuple[float, float, float] | None:
+    bounds = _glb_position_bounds(path)
+    if not bounds:
+        return None
+    mins, maxs = bounds
+    return tuple((float(mins[idx]) + float(maxs[idx])) / 2.0 for idx in range(3))
+
+
+def _tileset_transform_point(
+    transform: list[float],
+    point: tuple[float, float, float],
+) -> tuple[float, float, float] | None:
+    if len(transform) != 16:
+        return None
+    px, py, pz = point
+    try:
+        return (
+            float(transform[0]) * px + float(transform[4]) * py + float(transform[8]) * pz + float(transform[12]),
+            float(transform[1]) * px + float(transform[5]) * py + float(transform[9]) * pz + float(transform[13]),
+            float(transform[2]) * px + float(transform[6]) * py + float(transform[10]) * pz + float(transform[14]),
+        )
+    except (TypeError, ValueError):
+        return None
 
 
 def _read_glb_payload(path: Path) -> tuple[dict[str, Any], bytes] | None:
@@ -1320,6 +1425,44 @@ def _glb_tileset_is_stale(uuid: str, tileset_path: Path | None) -> bool:
                 return True
         except OSError:
             return True
+
+    # Legacy GLB fallback tilesetleri yalnızca mtime ile ayırt edemiyoruz.
+    # Eski üretimlerde transform yanlışsa model bbox merkezinden kilometrelerce
+    # sapıyor veya yükseklik absürt oluyor; bu durumda yeniden üret.
+    if source_glb and source_glb.exists():
+        try:
+            data = json.loads(tileset_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return True
+        transform = (((data or {}).get("root") or {}).get("transform")) or []
+        region = ((((data or {}).get("root") or {}).get("boundingVolume") or {}).get("region")) or []
+        local_center = _glb_local_center(source_glb)
+        rtc_center = _glb_rtc_center(source_glb) or (0.0, 0.0, 0.0)
+        if (
+            isinstance(transform, list)
+            and len(transform) == 16
+            and isinstance(region, list)
+            and len(region) >= 6
+            and local_center is not None
+        ):
+            sample_point = tuple(local_center[idx] + rtc_center[idx] for idx in range(3))
+            world_center = _tileset_transform_point(transform, sample_point)
+            if world_center is None:
+                return True
+            lat_r, lon_r, height = _ecef_to_geodetic(*world_center)
+            region_lon = (float(region[0]) + float(region[2])) / 2.0
+            region_lat = (float(region[1]) + float(region[3])) / 2.0
+            region_height = (float(region[4]) + float(region[5])) / 2.0
+            horizontal_dx = (lon_r - region_lon) * 6378137.0 * math.cos((lat_r + region_lat) / 2.0)
+            horizontal_dy = (lat_r - region_lat) * 6378137.0
+            horizontal_error = math.hypot(horizontal_dx, horizontal_dy)
+            lat_span = abs(float(region[3]) - float(region[1])) * 6378137.0
+            lon_span = abs(float(region[2]) - float(region[0])) * 6378137.0 * math.cos(region_lat)
+            bbox_diag = math.hypot(lat_span, lon_span)
+            horizontal_tolerance = max(150.0, bbox_diag * 2.0)
+            vertical_tolerance = max(120.0, abs(float(region[5]) - float(region[4])) * 2.0 + 50.0)
+            if horizontal_error > horizontal_tolerance or abs(height - region_height) > vertical_tolerance:
+                return True
     return False
 
 

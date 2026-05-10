@@ -7,6 +7,7 @@ window.AppPresentation = (() => {
   let _paused  = false;
   let _autoTimer = null;
   const AUTO_INTERVAL = 7000; // ms per slide
+  const PRESENTATION_ORBIT_OPTIONS = { pitch: -30, rangeFactor: 1.9, speedDegsPerSec: 4 };
 
   /* ---- html escape ------------------------------------------ */
   function _esc(v) {
@@ -206,9 +207,9 @@ window.AppPresentation = (() => {
     _startAuto();
 
     /* start camera orbit — retry once if tileset not yet loaded */
-    const ok = AppViewer.startOrbit(uuid, { pitch: -30, rangeFactor: 2.8, speedDegsPerSec: 4 });
+    const ok = AppViewer.startOrbit(uuid, PRESENTATION_ORBIT_OPTIONS);
     if (!ok) {
-      setTimeout(() => AppViewer.startOrbit(uuid, { pitch: -30, rangeFactor: 2.8, speedDegsPerSec: 4 }), 2500);
+      setTimeout(() => AppViewer.startOrbit(uuid, PRESENTATION_ORBIT_OPTIONS), 2500);
     }
   }
 
