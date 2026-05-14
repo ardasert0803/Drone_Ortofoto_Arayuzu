@@ -6,7 +6,7 @@
 
 Sunucu:
   - / -> frontend (statik HTML/JS/CSS)
-  - /api/* -> REST uçları (tasks, health, config)
+  - /api/* -> REST uçları (tasks, health)
   - /data/outputs/* -> NodeODM'den indirilmiş ortofoto/3D tile çıktıları
 NodeODM Docker container'ı ayrıca docker/docker-compose.yml ile ayağa kaldırılır.
 """

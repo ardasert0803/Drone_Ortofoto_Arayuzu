@@ -29,6 +29,9 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 _USE_CASES = {"construction", "heritage", "generic", "museum"}
 _DATA_SOURCES = {"drone", "phone", "open_source"}
+_PRESENTATION_CARD_IDS = ("hero", "history", "artifacts", "theme", "visit")
+_PRESENTATION_SHAPES = {"rounded", "sharp", "pill", "cut-corner"}
+_PRESENTATION_ORBIT_DIRECTIONS = {"clockwise", "counterclockwise"}
 _MUSEUM_FIELDS = (
     "museum_name",
     "historical_period",
@@ -46,6 +49,79 @@ _MUSEUM_FIELDS = (
 # --------------------------------------------------------------------- #
 # Şemalar
 # --------------------------------------------------------------------- #
+class TaskCreated(BaseModel):
+    uuid: str
+    images_uploaded: int
+
+
+class TilesetAdjustment(BaseModel):
+    east_meters: float = 0.0
+    north_meters: float = 0.0
+    up_meters: float = 0.0
+    heading_degrees: float = 0.0
+    pitch_degrees: float = 0.0
+    roll_degrees: float = 0.0
+    scale: float = 1.0
+
+
+class PresentationOrbit(BaseModel):
+    direction: str
+    heading_degrees: float
+    pitch_degrees: float
+    range_factor: float
+    speed_degs_per_sec: float
+
+
+class PresentationPlayback(BaseModel):
+    auto_interval_ms: int
+    auto_scroll_enabled: bool = True
+    auto_scroll_speed_px_per_sec: float = 26.0
+    auto_scroll_pause_ms: int = 1400
+
+
+class PresentationCardSettings(BaseModel):
+    id: str
+    enabled: bool
+    order: int
+    x_percent: float
+    y_percent: float
+    width_percent: float
+    height_percent: float
+    shape_preset: str
+    accent_color: str
+    kicker_color: str
+    kicker_text: str
+    title_text: str
+    body_text: str
+
+
+class PresentationSettings(BaseModel):
+    orbit: PresentationOrbit
+    playback: PresentationPlayback
+    cards: list[PresentationCardSettings]
+
+
+class TaskMetadataUpdate(BaseModel):
+    name: str | None = None
+    use_case: str | None = None
+    data_source: str | None = None
+    location: str | None = None
+    capture_date: str | None = None
+    description: str | None = None
+    museum_name: str | None = None
+    historical_period: str | None = None
+    museum_summary: str | None = None
+    featured_artifacts: str | None = None
+    visitor_notes: str | None = None
+    museum_address: str | None = None
+    visiting_hours: str | None = None
+    ticket_access: str | None = None
+    collection_theme: str | None = None
+    curator_contact: str | None = None
+    tileset_adjustment: TilesetAdjustment | None = None
+    presentation_settings: PresentationSettings | None = None
+
+
 class TaskSummary(BaseModel):
     uuid: str
     name: str | None = None
@@ -70,41 +146,7 @@ class TaskSummary(BaseModel):
     collection_theme: str | None = None
     curator_contact: str | None = None
     tileset_adjustment: dict[str, float] | None = None
-
-
-class TaskCreated(BaseModel):
-    uuid: str
-    images_uploaded: int
-
-
-class TilesetAdjustment(BaseModel):
-    east_meters: float = 0.0
-    north_meters: float = 0.0
-    up_meters: float = 0.0
-    heading_degrees: float = 0.0
-    pitch_degrees: float = 0.0
-    roll_degrees: float = 0.0
-    scale: float = 1.0
-
-
-class TaskMetadataUpdate(BaseModel):
-    name: str | None = None
-    use_case: str | None = None
-    data_source: str | None = None
-    location: str | None = None
-    capture_date: str | None = None
-    description: str | None = None
-    museum_name: str | None = None
-    historical_period: str | None = None
-    museum_summary: str | None = None
-    featured_artifacts: str | None = None
-    visitor_notes: str | None = None
-    museum_address: str | None = None
-    visiting_hours: str | None = None
-    ticket_access: str | None = None
-    collection_theme: str | None = None
-    curator_contact: str | None = None
-    tileset_adjustment: TilesetAdjustment | None = None
+    presentation_settings: PresentationSettings | None = None
 
 
 # NodeODM status code'larını okunaklı hale getir
@@ -120,6 +162,150 @@ _STATUS_TEXT = {
 
 def _museum_metadata_values(metadata: dict[str, Any]) -> dict[str, Any]:
     return {field: metadata.get(field) for field in _MUSEUM_FIELDS}
+
+
+def _presentation_metadata_value(metadata: dict[str, Any]) -> dict[str, Any] | None:
+    value = metadata.get("presentation_settings")
+    if not isinstance(value, dict):
+        return None
+    try:
+        return _normalize_presentation_settings(value)
+    except HTTPException:
+        return None
+
+
+def _normalize_presentation_settings(value: PresentationSettings | dict[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+
+    raw = value.model_dump() if isinstance(value, PresentationSettings) else value
+    if not isinstance(raw, dict):
+        raise HTTPException(400, "presentation_settings nesne olmalı")
+
+    orbit_raw = raw.get("orbit")
+    if not isinstance(orbit_raw, dict):
+        raise HTTPException(400, "presentation_settings.orbit nesne olmalı")
+    playback_raw = raw.get("playback")
+    if not isinstance(playback_raw, dict):
+        raise HTTPException(400, "presentation_settings.playback nesne olmalı")
+    cards_raw = raw.get("cards")
+    if not isinstance(cards_raw, list):
+        raise HTTPException(400, "presentation_settings.cards liste olmalı")
+    direction = str(orbit_raw.get("direction", "clockwise")).strip()
+    if direction not in _PRESENTATION_ORBIT_DIRECTIONS:
+        expected = ", ".join(sorted(_PRESENTATION_ORBIT_DIRECTIONS))
+        raise HTTPException(400, f"Geçersiz orbit.direction: {direction}. Beklenen: {expected}")
+
+    def _finite_float(
+        container: dict[str, Any],
+        field_name: str,
+        *,
+        path: str,
+        default: float | None = None,
+        minimum: float | None = None,
+        maximum: float | None = None,
+    ) -> float:
+        try:
+            raw_value = container.get(field_name, default)
+            number = float(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, f"presentation_settings.{path} sayısal olmalı") from exc
+        if not math.isfinite(number):
+            raise HTTPException(400, f"presentation_settings.{path} sonlu sayı olmalı")
+        if minimum is not None and number < minimum:
+            raise HTTPException(400, f"presentation_settings.{path} en az {minimum} olmalı")
+        if maximum is not None and number > maximum:
+            raise HTTPException(400, f"presentation_settings.{path} en fazla {maximum} olmalı")
+        return number
+
+    def _color(container: dict[str, Any], field_name: str, *, path: str) -> str:
+        value_text = str(container.get(field_name, "")).strip()
+        if not value_text:
+            raise HTTPException(400, f"presentation_settings.{path} zorunlu")
+        if len(value_text) > 32:
+            raise HTTPException(400, f"presentation_settings.{path} çok uzun")
+        return value_text
+
+    normalized_cards: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for index, item in enumerate(cards_raw):
+        if not isinstance(item, dict):
+            raise HTTPException(400, f"presentation_settings.cards[{index}] nesne olmalı")
+        card_id = str(item.get("id", "")).strip()
+        if not card_id:
+            raise HTTPException(400, f"presentation_settings.cards[{index}].id zorunlu")
+        if len(card_id) > 64:
+            raise HTTPException(400, f"presentation_settings.cards[{index}].id çok uzun")
+        if card_id in seen_ids:
+            raise HTTPException(400, f"presentation_settings.cards için tekrar eden id: {card_id}")
+        seen_ids.add(card_id)
+
+        shape_preset = str(item.get("shape_preset", "")).strip()
+        if shape_preset not in _PRESENTATION_SHAPES:
+            expected = ", ".join(sorted(_PRESENTATION_SHAPES))
+            raise HTTPException(400, f"Geçersiz shape_preset: {shape_preset}. Beklenen: {expected}")
+
+        order_raw = item.get("order")
+        if not isinstance(order_raw, int) or isinstance(order_raw, bool):
+            raise HTTPException(400, f"presentation_settings.cards[{index}].order tam sayı olmalı")
+        enabled_raw = item.get("enabled")
+        if not isinstance(enabled_raw, bool):
+            raise HTTPException(400, f"presentation_settings.cards[{index}].enabled boolean olmalı")
+
+        normalized_cards.append({
+            "id": card_id,
+            "enabled": enabled_raw,
+            "order": order_raw,
+            "x_percent": _finite_float(item, "x_percent", path=f"cards[{index}].x_percent", minimum=0.0, maximum=100.0),
+            "y_percent": _finite_float(item, "y_percent", path=f"cards[{index}].y_percent", minimum=0.0, maximum=100.0),
+            "width_percent": _finite_float(item, "width_percent", path=f"cards[{index}].width_percent", minimum=10.0, maximum=100.0),
+            "height_percent": _finite_float(item, "height_percent", path=f"cards[{index}].height_percent", minimum=10.0, maximum=100.0),
+            "shape_preset": shape_preset,
+            "accent_color": _color(item, "accent_color", path=f"cards[{index}].accent_color"),
+            "kicker_color": _color(item, "kicker_color", path=f"cards[{index}].kicker_color"),
+            "kicker_text": str(item.get("kicker_text", "")).strip(),
+            "title_text": str(item.get("title_text", "")).strip(),
+            "body_text": str(item.get("body_text", "")).strip(),
+        })
+
+    orbit = {
+        "direction": direction,
+        "heading_degrees": _finite_float(orbit_raw, "heading_degrees", path="orbit.heading_degrees", default=0.0, minimum=-360.0, maximum=360.0),
+        "pitch_degrees": _finite_float(orbit_raw, "pitch_degrees", path="orbit.pitch_degrees", minimum=-89.0, maximum=89.0),
+        "range_factor": _finite_float(orbit_raw, "range_factor", path="orbit.range_factor", minimum=0.1, maximum=20.0),
+        "speed_degs_per_sec": _finite_float(orbit_raw, "speed_degs_per_sec", path="orbit.speed_degs_per_sec", minimum=0.0, maximum=360.0),
+    }
+    auto_interval = playback_raw.get("auto_interval_ms")
+    if not isinstance(auto_interval, int) or isinstance(auto_interval, bool):
+        raise HTTPException(400, "presentation_settings.playback.auto_interval_ms tam sayı olmalı")
+    if auto_interval < 1000:
+        raise HTTPException(400, "presentation_settings.playback.auto_interval_ms en az 1000 olmalı")
+    auto_scroll_enabled = playback_raw.get("auto_scroll_enabled", True)
+    if not isinstance(auto_scroll_enabled, bool):
+        raise HTTPException(400, "presentation_settings.playback.auto_scroll_enabled boolean olmalı")
+    auto_scroll_pause = playback_raw.get("auto_scroll_pause_ms", 1400)
+    if not isinstance(auto_scroll_pause, int) or isinstance(auto_scroll_pause, bool):
+        raise HTTPException(400, "presentation_settings.playback.auto_scroll_pause_ms tam sayı olmalı")
+    if auto_scroll_pause < 0:
+        raise HTTPException(400, "presentation_settings.playback.auto_scroll_pause_ms negatif olamaz")
+
+    return {
+        "orbit": orbit,
+        "playback": {
+            "auto_interval_ms": auto_interval,
+            "auto_scroll_enabled": auto_scroll_enabled,
+            "auto_scroll_speed_px_per_sec": _finite_float(
+                playback_raw,
+                "auto_scroll_speed_px_per_sec",
+                path="playback.auto_scroll_speed_px_per_sec",
+                default=26.0,
+                minimum=1.0,
+                maximum=400.0,
+            ),
+            "auto_scroll_pause_ms": auto_scroll_pause,
+        },
+        "cards": normalized_cards,
+    }
 
 
 def _normalize_tileset_adjustment(value: TilesetAdjustment | dict[str, Any] | None) -> dict[str, float] | None:
@@ -183,6 +369,7 @@ def _summarize(info: dict[str, Any]) -> TaskSummary:
         description=metadata.get("description"),
         **_museum_metadata_values(metadata),
         tileset_adjustment=metadata.get("tileset_adjustment"),
+        presentation_settings=_presentation_metadata_value(metadata),
     )
 
 
@@ -255,6 +442,7 @@ def _local_task_summary(uuid: str) -> TaskSummary | None:
         description=metadata.get("description"),
         **_museum_metadata_values(metadata),
         tileset_adjustment=metadata.get("tileset_adjustment"),
+        presentation_settings=_presentation_metadata_value(metadata),
     )
 
 
@@ -553,6 +741,13 @@ async def update_task(uuid: str, payload: TaskMetadataUpdate) -> TaskSummary:
         if payload.tileset_adjustment is not None
         else metadata.get("tileset_adjustment")
     )
+    presentation_settings = _normalize_presentation_settings(
+        payload.presentation_settings
+        if payload.presentation_settings is not None
+        else metadata.get("presentation_settings")
+    )
+    if normalized.get("use_case") != "museum":
+        presentation_settings = None
     if not normalized["name"]:
         raise HTTPException(400, "Proje adi zorunlu")
 
@@ -562,6 +757,7 @@ async def update_task(uuid: str, payload: TaskMetadataUpdate) -> TaskSummary:
         "pipeline_profile": metadata.get("pipeline_profile"),
         "local_upload_dir": metadata.get("local_upload_dir"),
         "tileset_adjustment": tileset_adjustment,
+        "presentation_settings": presentation_settings,
     }
     _write_metadata(uuid, {**preserved, **normalized})
 

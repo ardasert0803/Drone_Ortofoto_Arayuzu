@@ -1,4 +1,4 @@
-"""Sağlık ve config bilgisi uçları."""
+"""Sağlık bilgisi uçları."""
 from fastapi import APIRouter
 
 from config import settings
@@ -26,13 +26,4 @@ async def health() -> dict:
         "nodeodm": nodeodm_ok,
         "nodeodm_url": settings.NODEODM_URL,
         "nodeodm_info": nodeodm_info,
-    }
-
-
-@router.get("/config")
-async def public_config() -> dict:
-    """Frontend'in ihtiyaç duyduğu konfig değerleri (token vb.)."""
-    return {
-        "cesium_ion_token": settings.CESIUM_ION_TOKEN,
-        "nodeodm_url": settings.NODEODM_URL,
     }
