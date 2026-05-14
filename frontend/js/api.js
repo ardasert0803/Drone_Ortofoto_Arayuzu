@@ -43,7 +43,6 @@ window.API = (() => {
 
   return {
     health:      ()         => jget("/api/health"),
-    config:      ()         => jget("/api/config"),
     listTasks:   ()         => jget("/api/tasks"),
     getTask:     (uuid)     => jget(`/api/tasks/${uuid}`),
     createTask:  (formData) => jpost("/api/tasks", formData),

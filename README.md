@@ -15,7 +15,7 @@ Yerelde `uvicorn` ile çalışır, sadece ağır iş yapan **NodeODM** ve opsiyo
 +---------------------+        REST         +-----------------------------+
 |  Tarayıcı (Cesium)  |  <───────────────►  |  FastAPI (yerelde, port 8000)|
 +---------------------+   /api/tasks vs.    |  - /api/tasks (CRUD)         |
-                                            |  - /api/health, /config      |
+                                            |  - /api/health               |
                                             |  - /data/outputs/* statik    |
                                             +──────────────┬───────────────+
                                                            │ HTTP (NodeODM REST)
@@ -55,7 +55,6 @@ SektörelCesium/
 │   ├── uploads/            # Yüklenen drone fotoları (yerel kopya)
 │   ├── outputs/            # NodeODM'den indirilen ortofoto/3D tiles
 │   └── tiles/              # Manuel py3dtiles dönüşümleri
-├── .env.example
 ├── .gitignore
 └── README.md
 ```
@@ -64,19 +63,37 @@ SektörelCesium/
 
 ## Kurulum
 
-### 1) Cesium ion token al
+### 1) Cesium ion token notu
 
-[https://cesium.com/ion/tokens](https://cesium.com/ion/tokens) adresinden
-ücretsiz bir hesap aç, "default" token'ı kopyala.
+Cesium ion token **opsiyoneldir**. Repo paylasiminda guvenlik icin bos
+birakildi. Token olmadan da local ornek ortofoto ve 3D Tiles acilir; sadece
+**Cesium World Terrain** ve **OSM Buildings** gibi ion bagimli katmanlar
+devre disi kalir.
 
-### 2) `.env` dosyasını oluştur
+Token kullanmak istersen `.env` icindeki `CESIUM_ION_TOKEN` alanini doldurup
+frontend tarafinda `frontend/js/app.js` icindeki sabiti kendi tokeninla guncelle.
+
+### 2) NodeODM'i Docker'da başlat
+
+#### GPU'lu Docker icin Windows / WSL 2 notu
+
+Bu repodaki `nodeodm` servisi varsayilan olarak **GPU'lu** image kullanir.
+Windows'ta GPU ile calistirmak icin asagidaki ortam gerekli:
+
+- **WSL 2** kurulu ve guncel olmali
+- **Docker Desktop** `WSL 2 based engine` ile calismali
+- Docker Desktop'ta ilgili Linux dagitimi icin **WSL Integration** acik olmali
+- NVIDIA ekran karti ve **WSL 2 destekli guncel NVIDIA driver** kurulu olmali
+- Docker Desktop tarafinda GPU destegi acik olmali
+
+Kontrol komutlari:
 
 ```bash
-cp .env.example .env
-# .env dosyasını aç, CESIUM_ION_TOKEN değerini yaz
-```
+wsl --status
+wsl --update
+docker compose version
+docker info
 
-### 3) NodeODM'i Docker'da başlat
 
 ```bash
 cd docker
@@ -84,25 +101,7 @@ docker compose up -d
 docker compose ps           # sc-nodeodm running olmalı
 curl http://localhost:3000/info   # NodeODM cevap veriyor mu?
 ```
-
-> **Not (eski Django mimarisinden geçiş):** Orijinal projende Docker
-> Compose'ta `db` (postgis), `redis`, `web`, `celery_worker`, `celery_beat`
-> servisleri vardı. Bu mimaride bunlara ihtiyaç yok:
-> - **db / redis / celery** → SQLite + FastAPI'nin `BackgroundTasks`'i
->   yetiyor (uzun işin kendisini zaten NodeODM yapıyor).
-> - **web** → FastAPI yerelde `uvicorn` ile koşuyor, Docker'a girmiyor.
->
-> Sadece `nodeodm` kaldı. İstersen `py3dtiles` aracını da
-> `docker compose --profile tools run --rm py3dtiles ...` ile çağırabilirsin.
-
-> **GPU notu:** Image `opendronemap/nodeodm:gpu` — yani nvidia GPU
-> destekli sürüm. Gereksinim:
-> - Windows + Docker Desktop için: WSL2 + en güncel nvidia driver +
->   Docker Desktop Settings → Resources → "Enable GPU" açık.
-> - GPU yoksa `docker-compose.yml` içinde imajı `opendronemap/nodeodm:latest`
->   yap ve `deploy:` blokunu sil. CPU'da çok daha yavaş işler ama çalışır.
-
-### 4) Python ortamı ve bağımlılıklar
+### 3) Python ortamı ve bağımlılıklar
 
 ```bash
 cd ../backend
@@ -116,7 +115,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 5) FastAPI'yi çalıştır
+### 4) FastAPI'yi çalıştır
 
 ```bash
 # backend/ içindeyken

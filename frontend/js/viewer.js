@@ -1322,8 +1322,8 @@ window.AppViewer = (() => {
       center:  sphere.center.clone(),
       pitch:   Cesium.Math.toRadians(options.pitch ?? -30),
       range:   sphere.radius * (options.rangeFactor ?? 2.8),
-      heading: 0,
-      speed:   Cesium.Math.toRadians(options.speedDegsPerSec ?? 4),
+      heading: Cesium.Math.toRadians(options.heading ?? 0),
+      speed:   Cesium.Math.toRadians((options.direction === "counterclockwise" ? -1 : 1) * (options.speedDegsPerSec ?? 4)),
       lastMs:  null,
     };
 

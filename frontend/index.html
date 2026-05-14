@@ -21,7 +21,6 @@
   <div class="top-strip">
     <div class="mode-switch" aria-label="Calisma modu">
       <button id="btn-mode-drone" class="active" type="button">Drone</button>
-      <button id="btn-mode-indoor" type="button">Indoor</button>
     </div>
   </div>
 
@@ -35,11 +34,6 @@
           <span class="name">Sektörel Cesium</span>
           <span id="brand-subtitle" class="subtitle">Drone · Kaliteli Ortofoto</span>
         </div>
-      </div>
-
-      <!-- NodeODM sağlık çubuğu -->
-      <div id="health-bar" class="health">
-        <span class="dot"></span><span id="health-text">NodeODM kontrol ediliyor…</span>
       </div>
 
       <!-- Proje listesi -->
@@ -56,7 +50,7 @@
     <div id="sidebar-construction" hidden>
       <div class="constr-back-bar">
         <button id="btn-back-to-projects" class="back-button" type="button">← Projeler</button>
-        <span class="site-badge">Şantiye</span>
+        <span id="sidebar-project-badge" class="site-badge">Şantiye</span>
       </div>
       <div class="constr-site-header">
         <h2 id="constr-site-name">—</h2>
@@ -230,7 +224,7 @@
     <section id="panel-about" class="panel">
       <h3>Hakkında</h3>
       <div class="info-card" style="border-color: var(--glass-border); background: rgba(0,0,0,0.2);">
-        Bu arayuz hem drone ortofoto is akisini hem de telefonla cekilmis indoor fotogrametri projelerini ayni Cesium arayuzunde yonetir.
+        Bu arayuz drone ortofoto is akisini Cesium uzerinde yonetir.
       </div>
     </section>
   </aside>
@@ -512,12 +506,12 @@
       </div>
     </div>
 
-    <!-- Şeffaf orta alan — Cesium / ortofoto burada görünür -->
-    <div class="pres-spacer"></div>
-
-    <!-- Alt bilgi alanı — kartlar + navigasyon -->
-    <div class="pres-card-area">
+    <div class="pres-stage">
       <div id="pres-card-wrap" class="pres-card-wrap"></div>
+    </div>
+
+    <!-- Alt bilgi alanı — navigasyon -->
+    <div class="pres-card-area">
       <div class="pres-footer">
         <button id="btn-pres-prev" class="pres-nav-btn" type="button" aria-label="Önceki slayt">‹</button>
         <div id="pres-dots" class="pres-dots"></div>
@@ -528,6 +522,93 @@
     <!-- Progress strip -->
     <div class="pres-progress-track">
       <div id="pres-progress-fill" class="pres-progress-fill"></div>
+    </div>
+  </div>
+
+  <div id="modal-presentation-settings" class="modal hidden" role="dialog" aria-modal="true" aria-label="Sunum Modu Ayarlari">
+    <div class="modal-card pres-settings-modal-card">
+      <header>
+        <div>
+          <h3>Sunum Modu Ayarlari</h3>
+          <p class="pres-settings-modal-subtitle" id="pres-settings-project-name">Muze Projesi</p>
+        </div>
+        <button class="close" type="button" data-close-presentation-settings>×</button>
+      </header>
+      <div class="pres-settings-shell">
+        <aside class="pres-settings-sidebar">
+          <section class="form-section">
+            <h4>Genel</h4>
+            <label>
+              Dönüş yönü
+              <select id="pres-orbit-direction">
+                <option value="clockwise">Saat yönü</option>
+                <option value="counterclockwise">Saat yönü tersi</option>
+              </select>
+            </label>
+            <label>
+              Baslangic acisi
+              <input id="pres-orbit-heading" type="number" min="-360" max="360" step="0.1" />
+            </label>
+            <label>
+              Kamera egimi
+              <input id="pres-orbit-pitch" type="number" min="-89" max="89" step="0.1" />
+            </label>
+            <label>
+              Kamera yakinligi / uzakligi
+              <input id="pres-orbit-range" type="number" min="0.1" max="20" step="0.1" />
+            </label>
+            <label>
+              Dönüş hızı
+              <input id="pres-orbit-speed" type="number" min="0" max="360" step="0.1" />
+            </label>
+            <label>
+              Otomatik geçiş
+              <input id="pres-auto-interval" type="number" min="1000" step="100" />
+            </label>
+            <label class="pres-settings-check pres-settings-check-compact">
+              <input id="pres-auto-scroll-enabled" type="checkbox" />
+              <span>Kart icinde otomatik scroll</span>
+            </label>
+            <label>
+              Scroll hizi
+              <input id="pres-auto-scroll-speed" type="number" min="1" max="400" step="1" />
+            </label>
+            <label>
+              Kenarda bekleme
+              <input id="pres-auto-scroll-pause" type="number" min="0" step="100" />
+            </label>
+            <div class="pres-settings-camera-note">
+              Kamera bu acilarla ortofoto/model merkezine bakarak orbit baslatir. Otomatik scroll yalnizca tasan kartlarda calisir.
+            </div>
+          </section>
+          <section class="form-section">
+            <div class="pres-settings-cardlist-head">
+              <h4>Kartlar</h4>
+              <button id="btn-pres-settings-add-card" type="button" class="pres-settings-add-card">+ Kart Ekle</button>
+            </div>
+            <div id="pres-settings-card-list" class="pres-settings-card-list"></div>
+          </section>
+        </aside>
+        <section class="pres-settings-main">
+          <div class="pres-settings-preview-head">
+            <h4>Canli Preview</h4>
+            <span>Kartlari surukleyerek konumlandirabilir, secili karti sag panelden ince ayarlayabilirsin.</span>
+          </div>
+          <div id="pres-settings-preview" class="pres-settings-preview"></div>
+        </section>
+        <aside class="pres-settings-inspector-wrap">
+          <section class="form-section">
+            <h4>Seçili Kart</h4>
+            <div id="pres-settings-inspector"></div>
+          </section>
+        </aside>
+      </div>
+      <div id="pres-settings-status" class="status"></div>
+      <footer>
+        <button id="btn-pres-settings-reset" type="button">Varsayilana Don</button>
+        <button type="button" data-close-presentation-settings>Iptal</button>
+        <button id="btn-pres-settings-save" type="button" class="primary">Kaydet</button>
+      </footer>
     </div>
   </div>
 
@@ -637,6 +718,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/annotate.js"></script>
   <script src="/js/presentation.js"></script>
+  <script src="/js/presentation-settings.js"></script>
   <script src="/js/viewer.js"></script>
   <script src="/js/measurement.js"></script>
   <script src="/js/notes.js"></script>
