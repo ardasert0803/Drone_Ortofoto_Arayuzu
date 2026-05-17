@@ -2,51 +2,31 @@ window.AppUpload = (() => {
   const controllers = {};
 
   function bind(callbacks) {
-    const getMode = callbacks?.getMode || (() => "drone");
     const onDroneCreated = callbacks?.onDroneCreated || (() => {});
     const onDroneUpdated = callbacks?.onDroneUpdated || (() => {});
-    const onIndoorCreated = callbacks?.onIndoorCreated || (() => {});
     const launcher = document.getElementById("btn-new-project");
+    const droneModal = createModalConfig({
+      mode: "drone",
+      modalId: "modal-upload",
+      formId: "upload-form",
+      statusId: "upload-status",
+      filesInputId: "project-images",
+      folderInputId: "project-image-folder",
+      summaryId: "upload-file-summary",
+      minFiles: 5,
+      createRequest: API.createProject,
+      updateRequest: API.updateProject,
+      onCreated: onDroneCreated,
+      onUpdated: onDroneUpdated,
+      requiredNameMessage: "Proje adi zorunlu.",
+      fileMessage: "En az 5 fotograf secmelisin.",
+    });
 
-    const modalConfigs = {
-      drone: createModalConfig({
-        mode: "drone",
-        modalId: "modal-upload",
-        formId: "upload-form",
-        statusId: "upload-status",
-        filesInputId: "project-images",
-        folderInputId: "project-image-folder",
-        summaryId: "upload-file-summary",
-        minFiles: 5,
-        createRequest: API.createProject,
-        updateRequest: API.updateProject,
-        onCreated: onDroneCreated,
-        onUpdated: onDroneUpdated,
-        requiredNameMessage: "Proje adi zorunlu.",
-        fileMessage: "En az 5 fotograf secmelisin.",
-      }),
-      indoor: createModalConfig({
-        mode: "indoor",
-        modalId: "modal-upload-indoor",
-        formId: "indoor-upload-form",
-        statusId: "indoor-upload-status",
-        filesInputId: "indoor-images",
-        folderInputId: "indoor-image-folder",
-        summaryId: "indoor-upload-file-summary",
-        minFiles: 15,
-        createRequest: API.createIndoorProject,
-        onCreated: onIndoorCreated,
-        requiredNameMessage: "Indoor proje adi zorunlu.",
-        fileMessage: "Indoor is akisi icin en az 15 fotograf secmelisin.",
-      }),
-    };
-
-    Object.assign(controllers, modalConfigs);
-    Object.values(modalConfigs).forEach(bindModal);
+    controllers.drone = droneModal;
+    bindModal(droneModal);
 
     launcher.addEventListener("click", () => {
-      const mode = getMode() === "indoor" ? "indoor" : "drone";
-      modalConfigs[mode].openModal();
+      droneModal.openModal();
     });
   }
 

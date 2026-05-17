@@ -855,10 +855,6 @@
     }
   }
 
-  async function refreshIndoorProjects() {
-    return Promise.resolve();
-  }
-
   dom.modeDroneButton.addEventListener("click", () => setMode("drone"));
   window.addEventListener("popstate", () => {
     initializeDroneMode({updateUrl: false, syncSelection: false});
@@ -930,16 +926,12 @@
   });
 
   AppUpload.bind({
-    getMode: () => state.mode,
     onDroneCreated: async () => {
       await refreshDroneProjects();
     },
     onDroneUpdated: async (project) => {
       state.selected = project.uuid;
       await refreshDroneProjects();
-    },
-    onIndoorCreated: async () => {
-      await refreshIndoorProjects();
     },
   });
 

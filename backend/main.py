@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from config import settings
-from routers import health, indoor, tasks
+from routers import health, tasks
 
 app = FastAPI(
     title="Sektörel Cesium — Ortofoto Arayüzü",
@@ -25,19 +25,12 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(tasks.router)
-app.include_router(indoor.router)
 
 app.mount(
     "/data/outputs",
     StaticFiles(directory=str(settings.OUTPUT_DIR)),
     name="outputs",
 )
-app.mount(
-    "/data/indoor/outputs",
-    StaticFiles(directory=str(settings.INDOOR_OUTPUT_DIR)),
-    name="indoor_outputs",
-)
-
 app.mount(
     "/",
     StaticFiles(directory=str(settings.FRONTEND_DIR), html=True),

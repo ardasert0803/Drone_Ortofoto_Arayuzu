@@ -72,34 +72,6 @@ services:
       - ../data/outputs:/data
 
 
-
-  indoor-recon:
-
-    build:
-
-      context: ./indoor
-
-      dockerfile: Dockerfile
-
-    image: sc-indoor-recon:latest
-
-    restart: "no"
-
-    profiles: ["indoor"]
-
-    working_dir: /workspace
-
-    environment:
-
-      INDOOR_RECON_MOCK: ${INDOOR_RECON_MOCK:-0}
-
-    volumes:
-
-      - ..:/workspace
-
-
-
 volumes:
 
   nodeodm-data:
-

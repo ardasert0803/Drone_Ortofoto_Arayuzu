@@ -80,18 +80,6 @@
       </div>
     </section>
 
-    <section id="panel-layers-indoor" class="panel" hidden>
-      <h3>Indoor Katmanlar</h3>
-      <label class="toggle">
-        <input type="checkbox" id="layer-indoor-model" checked />
-        <span class="switch"></span>
-        <span>3D Indoor Model</span>
-      </label>
-      <div class="info-card info-card-muted">
-        Indoor modeller georefsiz yerel sahnede açılır. Globe ve OSM katmanları bu modda gizlenir.
-      </div>
-    </section>
-
     <section id="panel-layers-construction" class="panel" hidden>
       <h3>Katmanlar</h3>
       <label class="toggle">
@@ -368,80 +356,6 @@
     </div>
   </div>
 
-  <div id="modal-upload-indoor" class="modal hidden" role="dialog" aria-modal="true">
-    <div class="modal-card">
-      <header>
-        <h3>Yeni Indoor Proje</h3>
-        <button class="close" data-close-modal>×</button>
-      </header>
-      <form id="indoor-upload-form">
-        <div class="modal-grid">
-          <section class="form-section">
-            <h4>Indoor Proje Bilgileri</h4>
-            <label>
-              Proje adı
-              <input type="text" name="name" placeholder="örn: ofis_kat2_2026_04" required />
-            </label>
-            <label>
-              Bina adı
-              <input type="text" name="building_name" placeholder="örn: Merkez Ofis" />
-            </label>
-            <label>
-              Kat etiketi
-              <input type="text" name="floor_label" placeholder="örn: Kat 2" />
-            </label>
-            <label>
-              Alan / mekan etiketi
-              <input type="text" name="space_label" placeholder="örn: Toplantı odası A" />
-            </label>
-            <label>
-              Konum
-              <input type="text" name="location" placeholder="örn: İstanbul / Şişli" />
-            </label>
-            <label>
-              Çekim tarihi
-              <input type="date" name="capture_date" />
-            </label>
-            <label class="field-span-full">
-              Açıklama
-              <textarea name="description" rows="5" placeholder="Çekim notları, alan tarifi veya kalite notları"></textarea>
-            </label>
-          </section>
-
-          <section class="form-section">
-            <h4>Telefon Fotoğrafları</h4>
-            <div class="field-span-full">
-              <span class="upload-label">Indoor fotoğraf seti (en az 15)</span>
-              <div class="upload-dropzone">
-                <span class="upload-dropzone-copy">
-                  <span class="upload-kicker">Indoor Capture</span>
-                  <strong>Dosya veya klasör seç</strong>
-                  <span class="upload-subtext">Telefonla çekilmiş, yüksek örtüşmeli JPG veya PNG karelerini toplu olarak ekle</span>
-                </span>
-                <div class="upload-actions">
-                  <label class="upload-picker-button" for="indoor-images">Dosya seç</label>
-                  <input id="indoor-images" class="upload-picker" type="file" name="images" multiple accept="image/*" />
-                  <label class="upload-picker-button secondary" for="indoor-image-folder">Klasör seç</label>
-                  <input id="indoor-image-folder" class="upload-picker" type="file" multiple accept="image/*" webkitdirectory directory />
-                </div>
-              </div>
-              <div id="indoor-upload-file-summary" class="upload-file-summary">Henüz dosya veya klasör seçilmedi</div>
-              <div class="upload-compat">Öneri: aynı mekanı farklı açılardan, yüksek örtüşmeyle ve hareket bulanıklığı olmadan çek.</div>
-            </div>
-            <p class="hint">
-              Indoor reconstruction ayrı Docker hattında çalışır. İlk sürüm telefon foto seti içindir; video ve 360 pano desteklenmez.
-            </p>
-          </section>
-        </div>
-        <div id="indoor-upload-status" class="status"></div>
-        <footer>
-          <button type="button" data-close-modal>İptal</button>
-          <button type="submit" class="primary">Indoor Görevi Başlat</button>
-        </footer>
-      </form>
-    </div>
-  </div>
-
   <div id="note-detail-popup" class="note-popup hidden" role="dialog" aria-label="Not detayı">
     <div class="note-popup-inner">
       <div class="note-popup-header">
@@ -687,15 +601,15 @@
 
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="/js/api.js?v=20260517-1"></script>
+  <script src="/js/api.js?v=20260517-2"></script>
   <script src="/js/annotate.js?v=20260517-1"></script>
   <script src="/js/presentation.js?v=20260517-1"></script>
   <script src="/js/presentation-settings.js?v=20260517-1"></script>
-  <script src="/js/viewer.js?v=20260517-1"></script>
+  <script src="/js/viewer.js?v=20260517-2"></script>
   <script src="/js/measurement.js?v=20260517-3"></script>
   <script src="/js/notes.js?v=20260517-2"></script>
   <script src="/js/toast.js?v=20260517-1"></script>
-  <script src="/js/upload.js?v=20260517-1"></script>
-  <script src="/js/app.js?v=20260517-4"></script>
+  <script src="/js/upload.js?v=20260517-2"></script>
+  <script src="/js/app.js?v=20260517-5"></script>
 </body>
 </html>

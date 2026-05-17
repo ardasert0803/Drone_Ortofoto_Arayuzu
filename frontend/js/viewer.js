@@ -28,7 +28,6 @@ window.AppViewer = (() => {
 
   let orthoVisible = true;
   let droneTilesVisible = true;
-  let indoorTilesVisible = true;
   let osmVisible = false;
 
   let _orbitHandler = null;
@@ -41,15 +40,12 @@ window.AppViewer = (() => {
 
   function _applySceneMode() {
     if (!viewer) return;
-    const isIndoor = currentMode === "indoor";
-    viewer.scene.globe.show = !isIndoor;
-    viewer.scene.skyAtmosphere.show = !isIndoor;
-    if (viewer.scene.skyBox) viewer.scene.skyBox.show = !isIndoor;
-    if (viewer.scene.sun) viewer.scene.sun.show = !isIndoor;
-    if (viewer.scene.moon) viewer.scene.moon.show = !isIndoor;
-    viewer.scene.backgroundColor = isIndoor
-      ? Cesium.Color.fromCssColorString("#11161c")
-      : Cesium.Color.BLACK;
+    viewer.scene.globe.show = true;
+    viewer.scene.skyAtmosphere.show = true;
+    if (viewer.scene.skyBox) viewer.scene.skyBox.show = true;
+    if (viewer.scene.sun) viewer.scene.sun.show = true;
+    if (viewer.scene.moon) viewer.scene.moon.show = true;
+    viewer.scene.backgroundColor = Cesium.Color.BLACK;
   }
 
   function _applyVisibility() {
@@ -57,10 +53,8 @@ window.AppViewer = (() => {
       layer.show = currentMode === "drone" && orthoVisible;
     }
     for (const [key, tileset] of tilesets.entries()) {
-      const pipeline = key.startsWith("indoor:") ? "indoor" : "drone";
-      tileset.show = pipeline === "indoor"
-        ? currentMode === "indoor" && indoorTilesVisible
-        : currentMode === "drone" && droneTilesVisible;
+      const isDroneTileset = key.startsWith("drone:");
+      tileset.show = isDroneTileset && currentMode === "drone" && droneTilesVisible;
     }
     if (osmBuildings) {
       osmBuildings.show = currentMode === "drone" && osmVisible;
@@ -160,7 +154,6 @@ window.AppViewer = (() => {
     setTimeout(() => flyToHome({ duration: 2.4 }), 350);
 
     viewer.homeButton?.viewModel?.command.beforeExecute.addEventListener((e) => {
-      if (currentMode === "indoor") return;
       e.cancel = true;
       flyToHome({ duration: 1.8 });
     });
@@ -1401,7 +1394,7 @@ window.AppViewer = (() => {
     const contentUri = descriptor?.root?.content?.uri;
 
     const tileset = await Cesium.Cesium3DTileset.fromUrl(url, {
-      maximumScreenSpaceError: pipeline === "indoor" ? 8 : 16,
+      maximumScreenSpaceError: 16,
     });
     const debugMeta = {
       type: "tileset",
@@ -1451,11 +1444,6 @@ window.AppViewer = (() => {
 
   function setDroneTilesetVisibility(on) {
     droneTilesVisible = !!on;
-    _applyVisibility();
-  }
-
-  function setIndoorTilesetVisibility(on) {
-    indoorTilesVisible = !!on;
     _applyVisibility();
   }
 
@@ -1616,7 +1604,7 @@ window.AppViewer = (() => {
   }
 
   function setMode(mode) {
-    currentMode = mode === "indoor" ? "indoor" : "drone";
+    currentMode = mode === "drone" ? "drone" : "drone";
     _applySceneMode();
     _applyVisibility();
   }
@@ -1631,7 +1619,6 @@ window.AppViewer = (() => {
     loadTileset,
     removeTileset,
     setDroneTilesetVisibility,
-    setIndoorTilesetVisibility,
     toggleOsmBuildings,
     setProjectBounds,
     getTilesetDebugInfo,
