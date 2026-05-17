@@ -3,9 +3,6 @@
 Drone fotoğraflarını **NodeODM** ile ortofotoya / 3D Tile'a çevirip
 **CesiumJS** üzerinde 3 boyutlu olarak gösteren web arayüzü.
 
-PDF'teki proje kapsamından farkı: **web tarafı (FastAPI) Docker'da koşmuyor**.
-Yerelde `uvicorn` ile çalışır, sadece ağır iş yapan **NodeODM** ve opsiyonel
-**py3dtiles** container'ları Docker üzerinden gider.
 
 ---
 
@@ -65,13 +62,11 @@ SektörelCesium/
 
 ### 1) Cesium ion token notu
 
-Cesium ion token **opsiyoneldir**. Repo paylasiminda guvenlik icin bos
-birakildi. Token olmadan da local ornek ortofoto ve 3D Tiles acilir; sadece
+Cesium ion token şu anda frontend tarafında gömülü. Repo paylasiminda ekstra tekrardan bir token almaya gerek kalmadan kullanma rahatlığı için. Token olmadan da local ornek ortofoto ve 3D Tiles acilir; sadece
 **Cesium World Terrain** ve **OSM Buildings** gibi ion bagimli katmanlar
 devre disi kalir.
 
-Token kullanmak istersen `.env` icindeki `CESIUM_ION_TOKEN` alanini doldurup
-frontend tarafinda `frontend/js/app.js` icindeki sabiti kendi tokeninla guncelle.
+Tokeni değiştirmek istenirse frontend tarafında js klasörü içerisinde app.js dosyası içerisinde 28.ci satırda const CESIUM_ION_TOKEN = "TOKEN" ile başlayan kısımda tırnak içerisindeki yeri değiştirmeniz yeter .
 
 ### 2) NodeODM'i Docker'da başlat
 
@@ -80,26 +75,14 @@ frontend tarafinda `frontend/js/app.js` icindeki sabiti kendi tokeninla guncelle
 Bu repodaki `nodeodm` servisi varsayilan olarak **GPU'lu** image kullanir.
 Windows'ta GPU ile calistirmak icin asagidaki ortam gerekli:
 
-- **WSL 2** kurulu ve guncel olmali
-- **Docker Desktop** `WSL 2 based engine` ile calismali
-- Docker Desktop'ta ilgili Linux dagitimi icin **WSL Integration** acik olmali
-- NVIDIA ekran karti ve **WSL 2 destekli guncel NVIDIA driver** kurulu olmali
-- Docker Desktop tarafinda GPU destegi acik olmali
+- WSL 2 kurulu ve guncel olmali eğer docker desktop kullanıyorsanız Windows üzerinde 
+- Eğer linux üzerinde çalışıyorsa zaten bir sorun olmamalı
+- Docker yml içerisinde zaten 3000 portunda başlıyacak şekilde ayarlı 
 
 Kontrol komutlari:
 
 ```bash
-wsl --status
-wsl --update
-docker compose version
-docker info
-
-
-```bash
-cd docker
-docker compose up -d
-docker compose ps           # sc-nodeodm running olmalı
-curl http://localhost:3000/info   # NodeODM cevap veriyor mu?
+docker compose up 
 ```
 ### 3) Python ortamı ve bağımlılıklar
 
@@ -142,19 +125,7 @@ Tarayıcıda aç: <http://localhost:8000>
 
 ---
 
-## NodeODM ipuçları
-
-- 5'ten az fotoğraf ile genelde başarısız olur. Bina/şantiye için
-  **40–80%** overlap'li 30+ foto öner.
-- 3D Tiles üretimi için NodeODM komut satırında `--3d-tiles` desteklenir
-  (opsiyon `tasks.py` içinde geçilir).
-- Geri uyumluluk için orthophoto pyramid pyramid (TMS) yoksa, GeoTIFF'i
-  Cesium'a düşürmek için Cesium ion'a manuel asset olarak yükleyip
-  asset id ile çağırabilirsin. (Şu an `viewer.js` TMS'yi otomatik dener.)
-
----
-
-## Geliştirici notları
+## Ek Notlar
 
 - Backend ve frontend aynı port üzerinden servis edilir (`8000`).
   CORS ayarı zaten `*` olarak açık olduğu için frontend'i ayrı bir
