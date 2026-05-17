@@ -1,4 +1,3 @@
-"""Convert a textured OBJ mesh to GLB with Blender."""
 from __future__ import annotations
 
 import sys

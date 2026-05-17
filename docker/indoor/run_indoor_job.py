@@ -1,4 +1,3 @@
-"""Run the indoor COLMAP/OpenMVS reconstruction pipeline for one manifest."""
 from __future__ import annotations
 
 import json
@@ -69,7 +68,8 @@ def _run(command: list[str], *, stage: str, progress: float, state_path: Path, c
         progress=progress,
     )
     _log(f"{stage}: {' '.join(command)}")
-    subprocess.run(command, check=True, cwd=str(cwd) if cwd else None)  # noqa: S603
+    subprocess.run(command, check=True, cwd=str(cwd) if cwd else None)  
+
 
 
 def _copy_matching_files(source_dir: Path, destination_dir: Path, stems: Iterable[str]) -> None:
@@ -471,7 +471,8 @@ def main(argv: list[str]) -> int:
         )
         _log("indoor pipeline tamamlandi")
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  
+
         _merge_state(
             state_path,
             status=STATUS_FAILED,

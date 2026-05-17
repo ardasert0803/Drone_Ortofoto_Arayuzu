@@ -1,93 +1,105 @@
-# Sektörel Cesium — Docker servisleri
-#
-# Web (FastAPI) Docker'da DEĞİL — yerelde uvicorn ile çalışır.
-# Burada sadece ağır işlem yapan NodeODM container'ı kalır.
-#
-# Eski Django mimarisindeki db (postgis), redis, web, celery_worker,
-# celery_beat servisleri kaldırıldı. FastAPI tek başına yetiyor.
-#
-# Ayağa kaldırma:
-#   cd docker
-#   docker compose up -d
-#
-# Durum:
-#   docker compose ps
-#
-# NodeODM API: http://localhost:3000
+
 
 services:
-  nodeodm:
-    # GPU'lu sürüm — orijinal projendeki gibi
-    image: opendronemap/nodeodm:gpu
-    container_name: sc-nodeodm
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    volumes:
-      # Yüklenen fotolar ve üretilen çıktılar persist olsun
-      - nodeodm-data:/var/www/data
-      # Ana projedeki uploads klasörünü read-only mount et
-      - ../data/uploads:/host_uploads:ro
-    environment:
-      # Tek GPU varsa 0 veya all ayni sonucu verir.
-      # Birden fazla GPU varsa .env icinde NODEODM_GPU_DEVICE=0 gibi secilebilir.
-      NVIDIA_VISIBLE_DEVICES: ${NODEODM_GPU_DEVICE:-all}
-      NVIDIA_DRIVER_CAPABILITIES: compute,utility
-    command:
-      # Maks. eşzamanlı task = 2; daha fazlası RAM'i şişirir
-      - "--max_concurrency"
-      - "2"
-      # Foto sayısı sınırsız
-      - "--max_images"
-      - "0"
-      # Tüm yeni task'larda 3D tiles üretimini varsayılan olarak aç
-      - "--options"
-      - '[{"name":"3d-tiles","value":true},{"name":"build-overviews","value":true}]'
-      # Token (opsiyonel) — açık ağda public erişimi engelle
-      # - "--token"
-      # - "change-me"
 
-    # ---- GPU desteği (nvidia-container-toolkit gerekli) ----
-    # Docker Desktop > Settings > Resources > "Enable GPU" acik olmali.
-    # Not: fast-orthophoto akisi yogun GPU kullanmaz; GPU daha cok OpenMVS
-    # gibi dense/3D asamalarinda anlamli sekilde devreye girer.
-    # GPU yoksa bu blok'u silip image'i opendronemap/nodeodm:latest yap.
+  nodeodm:
+
+    image: opendronemap/nodeodm:gpu
+
+    container_name: sc-nodeodm
+
+    restart: unless-stopped
+
+    ports:
+
+      - "3000:3000"
+
+    volumes:
+
+      - nodeodm-data:/var/www/data
+
+      - ../data/uploads:/host_uploads:ro
+
+    environment:
+
+      NVIDIA_VISIBLE_DEVICES: ${NODEODM_GPU_DEVICE:-all}
+
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+
+    command:
+
+      - "--max_concurrency"
+
+      - "2"
+
+      - "--max_images"
+
+      - "0"
+
+      - "--options"
+
+      - '[{"name":"3d-tiles","value":true},{"name":"build-overviews","value":true}]'
+
+
+
     deploy:
+
       resources:
+
         reservations:
+
           devices:
+
             - driver: nvidia
+
               count: all
+
               capabilities: [gpu]
 
-  # py3dtiles — opsiyonel point cloud (.laz) -> 3D Tiles converter.
-  # NodeODM 3D tiles üretmediyse veya çıktıyı yeniden işlemek istersen.
-  # Manuel kullanım:
-  #   docker compose run --rm py3dtiles py3dtiles convert \
-  #     /data/<uuid>/odm_georeferenced_model.laz \
-  #     --out /data/<uuid>/3d_tiles
+
+
   py3dtiles:
+
     image: py3dtiles/py3dtiles:latest
+
     container_name: sc-py3dtiles
+
     restart: "no"
-    profiles: ["tools"]   # default 'up'ta başlamasın, sadece istenince
+
+    profiles: ["tools"]
     volumes:
+
       - ../data/outputs:/data
 
-  # Indoor telefon fotogrametri hattı.
-  # Backend bu servisi docker compose run ile tek seferlik job olarak çağırır.
+
+
   indoor-recon:
+
     build:
+
       context: ./indoor
+
       dockerfile: Dockerfile
+
     image: sc-indoor-recon:latest
+
     restart: "no"
+
     profiles: ["indoor"]
+
     working_dir: /workspace
+
     environment:
+
       INDOOR_RECON_MOCK: ${INDOOR_RECON_MOCK:-0}
+
     volumes:
+
       - ..:/workspace
 
+
+
 volumes:
+
   nodeodm-data:
+
