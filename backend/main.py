@@ -8,7 +8,7 @@ from config import settings
 from routers import health, tasks
 
 app = FastAPI(
-    title="Sektörel Cesium — Ortofoto Arayüzü",
+    title="Drone Ortofoto Arayüzü",
     version="0.1.0",
     description=(
         "Drone fotoğraflarını NodeODM ile ortofoto + 3D tile'a çevirip "

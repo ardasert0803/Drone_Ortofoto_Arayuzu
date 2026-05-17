@@ -1,4 +1,4 @@
-# Sektörel Cesium — Drone Ortofoto Arayüzü
+# Drone Ortofoto Arayüzü
 
 Drone fotoğraflarını **NodeODM** ile ortofotoya / 3D Tile'a çevirip
 **CesiumJS** üzerinde 3 boyutlu olarak gösteren web arayüzü.
@@ -28,7 +28,7 @@ Drone fotoğraflarını **NodeODM** ile ortofotoya / 3D Tile'a çevirip
 ## Klasör yapısı
 
 ```
-SektörelCesium/
+Drone_Ortofoto_Arayüzü/
 ├── backend/                # FastAPI uygulaması (yerelde koşar)
 │   ├── main.py
 │   ├── config.py
