@@ -111,17 +111,25 @@ Tarayıcıda aç: <http://localhost:8000>
 
 ## Kullanım akışı
 
-1. Sol panelden **+ Yeni** → drone fotoğraflarını seç (en az 5 tane).
-2. Görev NodeODM'e gönderilir; sol listede **QUEUED → RUNNING → COMPLETED**
+1. Sol panelden **+ Yeni** → Proje türünü seç ve drone fotoğraflarını seç (en az 5 tane).
+2. Projenin ne olduğuna göre içerisindeki kartlar değişir şantiye tarafında ölçüm aletleri  olur müze tarafında ise sunum alanı gibi ve sunum alanını anlatan kartların dizilimi ve     sunum modu olur 
+3. Görev NodeODM'e gönderilir; sol listede **QUEUED → RUNNING → COMPLETED**
    olarak ilerler. (Liste 10 saniyede bir tazelenir.)
-3. **COMPLETED** olduğunda göreve tıkla → "Çıktıları indir" → ortofoto +
+4. **COMPLETED** olduğunda göreve tıkla → "Çıktıları indir" → ortofoto +
    3D Tiles otomatik viewer'a düşer.
-4. Sağ panelden katmanları aç/kapat, ortofoto opaklığını ayarla.
-5. **Ölçüm araçları**:
+5. Sağ panelden katmanları aç/kapat, ortofoto opaklığını ayarla.
+6. **Şantiye tarafı ölçüm araçları**:
    - *Mesafe* — ardışık iki+ noktaya tıkla, sağ tık ile bitir.
    - *Alan* — kapalı poligon için en az 3 nokta.
    - *Yükseklik* — alt ve üst noktayı tıkla, dikey fark çıkar.
    - *Temizle* — tüm çizimleri siler.
+7. **Müze tarafı sunum araçları**:
+   - *Sunum Modunu Başlat* — müze projesi için hazırlanan sunum akışını açar.
+   - *Sunum Modu Ayarları* — kartların sırasını, yerleşimini ve görünümünü düzenler.
+   - *Kart Düzeni* — başlık, açıklama ve içerik kartlarını sahne üzerinde konumlandırmanı sağlar.
+   - *Kamera Akışı* — model etrafındaki dönüş yönünü, başlangıç açısını, eğimi ve hızını ayarlarsın.
+   - *Otomatik Geçiş* — kartların ne kadar sürede değişeceğini belirlersin.
+   - *Canlı Preview* — yapılan sunum ayarlarını kaydetmeden önce önizleme yapmanı sağlar.
 
 ---
 
@@ -129,8 +137,10 @@ Tarayıcıda aç: <http://localhost:8000>
 
 - Backend ve frontend aynı port üzerinden servis edilir (`8000`).
   CORS ayarı zaten `*` olarak açık olduğu için frontend'i ayrı bir
-  geliştirme sunucusunda çalıştırabilirsin (örn. `python -m http.server`).
+  geliştirme sunucunda çalıştırabilirsin (örn. `python -m http.server`).
 - ODM çıktıları `data/outputs/<uuid>/` altında saklanır ve FastAPI
-  bunları `/data/outputs/...` URL'siyle statik servis eder.
-- `nodeodm_client.py` `httpx.AsyncClient` ile konuşur — yeni endpoint
-  eklemek istersen tek dosyayı düzenle.
+  bunları `/data/outputs/...` URL'siyle statik servis eder. uuıd burada random bir id'yi temsil ediyor çıkan id okunup çıkan .glb dosyası içerisindeki CESIUM_RTC ve RTC_CENTER verisi içerisindeki dönüşüm matrisleri okunur ve Wgs84 elipsoid'i üzerinde doğru matrislere oturtulur yaklaşık olarak %90 gibi bir tam oturma ölçeği var biraz yükseklik farkı haricinde ortofoto ile tileset uyuşarak oturuyor
+- Django mimarisi yerine uvicorn seçildi daha da guvicorn yerine daha performanslı olacağına karar verildi
+- Eğer NodeODM içerisinden çıkan veri tam olarak doğru tileset.json dosyasını çıkarmama gibi bir durum vardı bu yüzden çıkan output artık bir .glb dosyası olarak çıkıyor ve içerisindeki veri okunuyor bu yüzden fallback olan py3dtiles kısmı halen daha var ama iş akışı içerisinde gerek duyulmadan sonucu veriyor.
+- Ana iş akışını sağlayan dosya nodeODM için task oluşturan ardından içerisinden çıkan all.zip'i data içerisinde uuid içerisine açar ortofotoyu oluşturur onun içerisinden 3D tiles üretir ve bbox konumlarını yani sınır konumlarını hesaplar cesium da flyto sırasında direk alana oturması için viewer kameranın
+- Frontend tarafındaki ana iş akışının olduğu js dosyası viewer.js dosyası içerisinde cesium viewer'ı cağırır 3D tiles'lar seçili projeye göre yükler flyto animasyonlarını tetikler 3D modeli düzenlemek için kullanılan tileset adjustment ve sunum tarafı için olan orbit kontrolü
