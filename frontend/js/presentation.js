@@ -1,4 +1,3 @@
-/* Sunum Modu — müze projesi etrafında orbit + düzenlenebilir kartlar */
 window.AppPresentation = (() => {
   let _project = null;
   let _uuid = null;

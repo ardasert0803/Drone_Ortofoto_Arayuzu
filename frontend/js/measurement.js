@@ -1,31 +1,40 @@
-/* Cesium üzerinde şantiye ölçüm araçları.
- * Çoklu ölçüm: her yeni araç önceki tamamlanmış ölçümleri silmez.
- * "Temizle" tuşu tüm ölçümleri kaldırır.
- */
 window.AppMeasure = (() => {
   let viewer = null;
   let resultEl = null;
   let copyBtn = null;
+  let editorHandler = null;
+  let dragState = null;
+  let measurementSeq = 0;
 
-  // Tamamlanmış ölçümler (entities'leri viewer'da yaşıyor)
-  let completedEntities = [];
+  let completedMeasurements = [];
 
-  // Aktif (devam eden) ölçüm state'i
   let active = _freshActive();
 
   function _freshActive() {
-    return { tool: null, entities: [], positions: [], _line: null, _poly: null };
+    return {
+      id: `measure-${++measurementSeq}`,
+      tool: null,
+      entities: [],
+      positions: [],
+      markers: [],
+      _line: null,
+      _poly: null,
+      _label: null,
+      handler: null,
+      resultText: "",
+    };
   }
 
-  const MARKER_COLOR     = Cesium.Color.fromCssColorString("#f59e0b");
-  const LINE_COLOR       = Cesium.Color.fromCssColorString("#f59e0b");
-  const POLY_FILL        = Cesium.Color.fromCssColorString("#f59e0b").withAlpha(0.22);
-  const LABEL_BG         = Cesium.Color.fromCssColorString("#92400e").withAlpha(0.90);
+  const MARKER_COLOR = Cesium.Color.fromCssColorString("#f59e0b");
+  const LINE_COLOR = Cesium.Color.fromCssColorString("#f59e0b");
+  const POLY_FILL = Cesium.Color.fromCssColorString("#f59e0b").withAlpha(0.22);
+  const LABEL_BG = Cesium.Color.fromCssColorString("#92400e").withAlpha(0.90);
 
   function init(_viewer) {
     viewer = _viewer;
     resultEl = document.getElementById("measurement-result");
     copyBtn  = document.getElementById("btn-copy-measurement");
+    _bindEditorHandler();
   }
 
   function _setResult(text, copyText) {
@@ -46,18 +55,22 @@ window.AppMeasure = (() => {
 
   function clearAll() {
     if (active.handler) { active.handler.destroy(); active.handler = null; }
-    for (const e of completedEntities) { try { viewer.entities.remove(e); } catch {} }
+    _endDrag();
+    for (const measurement of completedMeasurements) {
+      for (const e of measurement.entities) { try { viewer.entities.remove(e); } catch {} }
+    }
     for (const e of active.entities)   { try { viewer.entities.remove(e); } catch {} }
-    completedEntities = [];
+    completedMeasurements = [];
     active = _freshActive();
     document.querySelectorAll('button[data-tool]').forEach(b => b.classList.remove('active'));
     if (resultEl) resultEl.classList.remove('recording');
+    if (viewer?.canvas) viewer.canvas.style.cursor = "";
     _setResult("—");
   }
 
   function _commitActive() {
     if (!active.tool || active.positions.length === 0) return;
-    completedEntities.push(...active.entities);
+    completedMeasurements.push(active);
     active = _freshActive();
   }
 
@@ -78,8 +91,11 @@ window.AppMeasure = (() => {
     if (!text || text === "—") return;
     const midpoint = _midpoint(active.positions, active.tool);
     if (!midpoint) return;
+    const measurement = active;
     const label = viewer.entities.add({
-      position: midpoint,
+      position: measurement.tool === "area"
+        ? new Cesium.CallbackProperty(() => _midpoint(measurement.positions, measurement.tool), false)
+        : midpoint,
       label: {
         text,
         font: "bold 13px sans-serif",
@@ -96,7 +112,126 @@ window.AppMeasure = (() => {
         heightReference: Cesium.HeightReference.NONE,
       },
     });
+    active._label = label;
+    active.resultText = text;
     active.entities.push(label);
+  }
+
+  function _pickWorldPosition(screenPosition) {
+    if (!viewer || !screenPosition) return null;
+    return viewer.scene.pickPosition(screenPosition)
+      || viewer.camera.pickEllipsoid(screenPosition, viewer.scene.globe.ellipsoid);
+  }
+
+  function _setEditorCursor(value = "") {
+    if (viewer?.canvas) viewer.canvas.style.cursor = value;
+  }
+
+  function _getCameraControlsState() {
+    const controller = viewer?.scene?.screenSpaceCameraController;
+    if (!controller) return null;
+    return {
+      enableRotate: controller.enableRotate,
+      enableTranslate: controller.enableTranslate,
+      enableTilt: controller.enableTilt,
+      enableLook: controller.enableLook,
+    };
+  }
+
+  function _setCameraControlsState(state) {
+    const controller = viewer?.scene?.screenSpaceCameraController;
+    if (!controller || !state) return;
+    controller.enableRotate = state.enableRotate;
+    controller.enableTranslate = state.enableTranslate;
+    controller.enableTilt = state.enableTilt;
+    controller.enableLook = state.enableLook;
+  }
+
+  function _findCompletedMeasurementById(id) {
+    return completedMeasurements.find((measurement) => measurement.id === id) || null;
+  }
+
+  function _resolveDraggableMeasurement(payload) {
+    if (!payload?.measurementId) return null;
+    const measurement = _findCompletedMeasurementById(payload.measurementId);
+    if (!measurement || measurement.tool !== "area") return null;
+    return measurement;
+  }
+
+  function _syncAreaMeasurement(measurement, options = {}) {
+    if (!measurement || measurement.tool !== "area") return;
+    const area = _polygonAreaSqMeters(measurement.positions);
+    const text = measurement.positions.length >= 3
+      ? `Alan: ${_fmtSqMeters(area)}`
+      : "Alan için 3+ nokta tıkla, sağ tık bitir";
+
+    measurement.resultText = text;
+    if (measurement._label?.label) {
+      measurement._label.label.text = text;
+    }
+    measurement.markers.forEach((marker, index) => {
+      if (!marker) return;
+      marker.position = measurement.positions[index];
+      marker._scMeasureVertex.index = index;
+    });
+    if (options.updateResult) {
+      _setResult(text, measurement.positions.length >= 3 ? text : "");
+    }
+    viewer?.scene?.requestRender?.();
+  }
+
+  function _startDrag(measurement, vertexIndex) {
+    if (!measurement || measurement.tool !== "area") return;
+    const cameraState = _getCameraControlsState();
+    dragState = { measurement, vertexIndex, cameraState };
+    if (cameraState) {
+      _setCameraControlsState({
+        ...cameraState,
+        enableRotate: false,
+        enableTranslate: false,
+        enableTilt: false,
+        enableLook: false,
+      });
+    }
+    _setEditorCursor("grabbing");
+  }
+
+  function _endDrag() {
+    if (!dragState) return;
+    const { cameraState } = dragState;
+    dragState = null;
+    _setCameraControlsState(cameraState);
+    _setEditorCursor("");
+  }
+
+  function _bindEditorHandler() {
+    if (!viewer || editorHandler) return;
+    editorHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+    editorHandler.setInputAction((click) => {
+      const picked = viewer.scene.pick(click.position);
+      const payload = picked?.id?._scMeasureVertex || null;
+      const measurement = _resolveDraggableMeasurement(payload);
+      if (!measurement) return;
+      _startDrag(measurement, payload.index);
+    }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+
+    editorHandler.setInputAction((movement) => {
+      if (dragState) {
+        const cartesian = _pickWorldPosition(movement.endPosition);
+        if (!cartesian) return;
+        dragState.measurement.positions[dragState.vertexIndex] = cartesian;
+        _syncAreaMeasurement(dragState.measurement, { updateResult: true });
+        return;
+      }
+      const picked = viewer.scene.pick(movement.endPosition);
+      const payload = picked?.id?._scMeasureVertex || null;
+      _setEditorCursor(_resolveDraggableMeasurement(payload) ? "grab" : "");
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    editorHandler.setInputAction(() => {
+      _endDrag();
+    }, Cesium.ScreenSpaceEventType.LEFT_UP);
   }
 
   function _midpoint(positions, tool) {
@@ -115,7 +250,6 @@ window.AppMeasure = (() => {
 
   function _start(tool) {
     if (!viewer) return;
-    // Önceki aktif ölçümü tamamla (silmeden koru)
     if (active.handler) { active.handler.destroy(); active.handler = null; }
     _commitActive();
 
@@ -127,8 +261,7 @@ window.AppMeasure = (() => {
     active.handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 
     active.handler.setInputAction((click) => {
-      const cartesian = viewer.scene.pickPosition(click.position) ||
-                        viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
+      const cartesian = _pickWorldPosition(click.position);
       if (!cartesian) return;
       active.positions.push(cartesian);
 
@@ -142,6 +275,11 @@ window.AppMeasure = (() => {
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       });
+      dot._scMeasureVertex = {
+        measurementId: active.id,
+        index: active.positions.length - 1,
+      };
+      active.markers.push(dot);
       active.entities.push(dot);
 
       if (tool === "distance")   _updateDistance();
@@ -157,54 +295,52 @@ window.AppMeasure = (() => {
     }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
   }
 
-  // ---- Mesafe ----
   function _updateDistance() {
     if (active.positions.length < 2) {
       _setResult("Mesafe için 2+ nokta tıkla, sağ tık bitir");
       return;
     }
+    const measurement = active;
     let total = 0;
-    for (let i = 1; i < active.positions.length; i++) {
-      total += Cesium.Cartesian3.distance(active.positions[i - 1], active.positions[i]);
+    for (let i = 1; i < measurement.positions.length; i++) {
+      total += Cesium.Cartesian3.distance(measurement.positions[i - 1], measurement.positions[i]);
     }
-    if (!active._line) {
-      active._line = viewer.entities.add({
+    if (!measurement._line) {
+      measurement._line = viewer.entities.add({
         polyline: {
-          positions: new Cesium.CallbackProperty(() => active.positions, false),
+          positions: new Cesium.CallbackProperty(() => measurement.positions, false),
           width: 3,
           material: LINE_COLOR,
           clampToGround: true,
         },
       });
-      active.entities.push(active._line);
+      measurement.entities.push(measurement._line);
     }
     _setResult(`Mesafe: ${_fmtMeters(total)}`);
   }
 
-  // ---- Alan ----
   function _updateArea() {
     if (active.positions.length < 3) {
       _setResult("Alan için 3+ nokta tıkla, sağ tık bitir");
       return;
     }
-    if (!active._poly) {
-      active._poly = viewer.entities.add({
+    const measurement = active;
+    if (!measurement._poly) {
+      measurement._poly = viewer.entities.add({
         polygon: {
           hierarchy: new Cesium.CallbackProperty(
-            () => new Cesium.PolygonHierarchy(active.positions), false),
+            () => new Cesium.PolygonHierarchy(measurement.positions), false),
           material: POLY_FILL,
           outline: true,
           outlineColor: LINE_COLOR,
           outlineWidth: 2,
         },
       });
-      active.entities.push(active._poly);
+      measurement.entities.push(measurement._poly);
     }
-    const area = _polygonAreaSqMeters(active.positions);
-    _setResult(`Alan: ${_fmtSqMeters(area)}`);
+    _syncAreaMeasurement(measurement, { updateResult: true });
   }
 
-  // ---- Yükseklik ----
   function _updateHeight() {
     if (active.positions.length < 2) {
       _setResult("Yükseklik için 2 nokta tıkla (alt · üst)");
@@ -216,7 +352,6 @@ window.AppMeasure = (() => {
     _setResult(`Yükseklik farkı: ${dh.toFixed(2)} m`);
   }
 
-  // ---- Eğim ----
   function _updateSlope() {
     if (active.positions.length < 2) {
       _setResult("Eğim için 2 nokta tıkla");
@@ -229,16 +364,17 @@ window.AppMeasure = (() => {
     const horiz = Cesium.Cartesian3.distance(pA, pB);
     const vert  = Math.abs(b.height - a.height);
 
-    if (!active._line) {
-      active._line = viewer.entities.add({
+    const measurement = active;
+    if (!measurement._line) {
+      measurement._line = viewer.entities.add({
         polyline: {
-          positions: new Cesium.CallbackProperty(() => active.positions, false),
+          positions: new Cesium.CallbackProperty(() => measurement.positions, false),
           width: 3,
           material: LINE_COLOR,
           clampToGround: false,
         },
       });
-      active.entities.push(active._line);
+      measurement.entities.push(measurement._line);
     }
 
     if (horiz < 0.01) {
@@ -252,7 +388,6 @@ window.AppMeasure = (() => {
     _setResult(result, result);
   }
 
-  // ---- Koordinat ----
   function _updateCoordinate() {
     if (active.positions.length < 1) {
       _setResult("Koordinat için 1 nokta tıkla");
@@ -267,7 +402,6 @@ window.AppMeasure = (() => {
     _setResult(result, `${lat}, ${lon}, ${alt}`);
   }
 
-  // ---- Yardımcılar ----
   function _fmtMeters(m) {
     return m >= 1000 ? `${(m / 1000).toFixed(3)} km` : `${m.toFixed(2)} m`;
   }
@@ -307,7 +441,7 @@ window.AppMeasure = (() => {
         _start(tool);
         const hints = {
           distance:   "Sol tık nokta ekler · sağ tık ölçümü tamamlar",
-          area:       "3+ nokta seç · sağ tık poligonu kapatır",
+          area:       "3+ nokta seç · sağ tık bitirir · sonra noktaları sürükleyebilirsin",
           height:     "Alt noktayı, sonra üst noktayı tıkla",
           slope:      "İki nokta tıkla · eğim ve yüzde hesaplanır",
           coordinate: "Bir nokta tıkla · koordinat gösterilir",

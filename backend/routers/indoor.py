@@ -1,4 +1,3 @@
-"""Indoor photogrammetry task router."""
 from __future__ import annotations
 
 from typing import Any
@@ -11,11 +10,9 @@ import indoor_pipeline
 
 router = APIRouter(prefix="/api/indoor/tasks", tags=["indoor"])
 
-
 class IndoorTaskCreated(BaseModel):
     uuid: str
     images_uploaded: int
-
 
 class IndoorTaskSummary(BaseModel):
     uuid: str
@@ -39,20 +36,16 @@ class IndoorTaskSummary(BaseModel):
     error_summary: str | None = None
     dispatch_error: str | None = None
 
-
 def _serialize(task: dict[str, Any]) -> IndoorTaskSummary:
     return IndoorTaskSummary(**task)
-
 
 @router.get("", response_model=list[IndoorTaskSummary])
 async def list_indoor_tasks() -> list[IndoorTaskSummary]:
     return [_serialize(task) for task in indoor_pipeline.list_tasks()]
 
-
 @router.get("/{uuid}", response_model=IndoorTaskSummary)
 async def get_indoor_task(uuid: str) -> IndoorTaskSummary:
     return _serialize(indoor_pipeline.get_task(uuid))
-
 
 @router.post("", response_model=IndoorTaskCreated)
 async def create_indoor_task(
@@ -77,16 +70,13 @@ async def create_indoor_task(
     )
     return IndoorTaskCreated(**payload)
 
-
 @router.delete("/{uuid}")
 async def delete_indoor_task(uuid: str) -> dict[str, str]:
     return indoor_pipeline.delete_task(uuid)
 
-
 @router.get("/{uuid}/tileset/url")
 async def indoor_tileset_url(uuid: str) -> dict[str, str]:
     return indoor_pipeline.tileset_url(uuid)
-
 
 @router.get("/{uuid}/log", response_class=PlainTextResponse)
 async def indoor_log(uuid: str) -> PlainTextResponse:

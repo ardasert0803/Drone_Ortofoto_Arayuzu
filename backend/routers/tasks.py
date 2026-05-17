@@ -1,11 +1,3 @@
-"""ODM task'larını yöneten REST router.
-
-Frontend buradaki uçları çağırarak:
-  * yeni bir ODM görevi başlatır (drone fotoğraflarını yükler)
-  * mevcut görevlerin listesini ve durumunu çeker
-  * tamamlanan görevin orthophoto / point cloud çıktısını indirir
-NodeODM container'ı Docker'da koşar; biz sadece HTTP üzerinden konuşuruz.
-"""
 from __future__ import annotations
 
 import io
@@ -45,14 +37,9 @@ _MUSEUM_FIELDS = (
     "curator_contact",
 )
 
-
-# --------------------------------------------------------------------- #
-# Şemalar
-# --------------------------------------------------------------------- #
 class TaskCreated(BaseModel):
     uuid: str
     images_uploaded: int
-
 
 class TilesetAdjustment(BaseModel):
     east_meters: float = 0.0
@@ -63,7 +50,6 @@ class TilesetAdjustment(BaseModel):
     roll_degrees: float = 0.0
     scale: float = 1.0
 
-
 class PresentationOrbit(BaseModel):
     direction: str
     heading_degrees: float
@@ -71,13 +57,11 @@ class PresentationOrbit(BaseModel):
     range_factor: float
     speed_degs_per_sec: float
 
-
 class PresentationPlayback(BaseModel):
     auto_interval_ms: int
     auto_scroll_enabled: bool = True
     auto_scroll_speed_px_per_sec: float = 26.0
     auto_scroll_pause_ms: int = 1400
-
 
 class PresentationCardSettings(BaseModel):
     id: str
@@ -94,12 +78,10 @@ class PresentationCardSettings(BaseModel):
     title_text: str
     body_text: str
 
-
 class PresentationSettings(BaseModel):
     orbit: PresentationOrbit
     playback: PresentationPlayback
     cards: list[PresentationCardSettings]
-
 
 class TaskMetadataUpdate(BaseModel):
     name: str | None = None
@@ -120,7 +102,6 @@ class TaskMetadataUpdate(BaseModel):
     curator_contact: str | None = None
     tileset_adjustment: TilesetAdjustment | None = None
     presentation_settings: PresentationSettings | None = None
-
 
 class TaskSummary(BaseModel):
     uuid: str
@@ -148,9 +129,6 @@ class TaskSummary(BaseModel):
     tileset_adjustment: dict[str, float] | None = None
     presentation_settings: PresentationSettings | None = None
 
-
-# NodeODM status code'larını okunaklı hale getir
-# https://github.com/OpenDroneMap/NodeODM/blob/master/libs/statusCodes.js
 _STATUS_TEXT = {
     10: "QUEUED",
     20: "RUNNING",
@@ -159,10 +137,8 @@ _STATUS_TEXT = {
     50: "CANCELED",
 }
 
-
 def _museum_metadata_values(metadata: dict[str, Any]) -> dict[str, Any]:
     return {field: metadata.get(field) for field in _MUSEUM_FIELDS}
-
 
 def _presentation_metadata_value(metadata: dict[str, Any]) -> dict[str, Any] | None:
     value = metadata.get("presentation_settings")
@@ -172,7 +148,6 @@ def _presentation_metadata_value(metadata: dict[str, Any]) -> dict[str, Any] | N
         return _normalize_presentation_settings(value)
     except HTTPException:
         return None
-
 
 def _normalize_presentation_settings(value: PresentationSettings | dict[str, Any] | None) -> dict[str, Any] | None:
     if value is None:
@@ -307,7 +282,6 @@ def _normalize_presentation_settings(value: PresentationSettings | dict[str, Any
         "cards": normalized_cards,
     }
 
-
 def _normalize_tileset_adjustment(value: TilesetAdjustment | dict[str, Any] | None) -> dict[str, float] | None:
     if value is None:
         return None
@@ -349,7 +323,6 @@ def _normalize_tileset_adjustment(value: TilesetAdjustment | dict[str, Any] | No
     )
     return None if is_identity else normalized
 
-
 def _summarize(info: dict[str, Any]) -> TaskSummary:
     status = info.get("status") or {}
     code = status.get("code") if isinstance(status, dict) else status
@@ -372,14 +345,11 @@ def _summarize(info: dict[str, Any]) -> TaskSummary:
         presentation_settings=_presentation_metadata_value(metadata),
     )
 
-
 def _metadata_dir() -> Path:
     return settings.UPLOAD_DIR / "_projects"
 
-
 def _metadata_path(uuid: str) -> Path:
     return _metadata_dir() / f"{uuid}.json"
-
 
 def _read_metadata(uuid: str) -> dict[str, Any]:
     if not uuid:
@@ -393,7 +363,6 @@ def _read_metadata(uuid: str) -> dict[str, Any]:
         return {}
     return data if isinstance(data, dict) else {}
 
-
 def _write_metadata(uuid: str, metadata: dict[str, Any]) -> None:
     meta_dir = _metadata_dir()
     meta_dir.mkdir(parents=True, exist_ok=True)
@@ -402,10 +371,8 @@ def _write_metadata(uuid: str, metadata: dict[str, Any]) -> None:
         encoding="utf-8",
     )
 
-
 def _output_dir_exists(uuid: str) -> bool:
     return _output_dir(uuid).is_dir()
-
 
 def _local_output_uuids() -> list[str]:
     if not settings.OUTPUT_DIR.exists():
@@ -414,7 +381,6 @@ def _local_output_uuids() -> list[str]:
         path.name for path in settings.OUTPUT_DIR.iterdir()
         if path.is_dir()
     )
-
 
 def _local_task_summary(uuid: str) -> TaskSummary | None:
     if not _output_dir_exists(uuid):
@@ -445,13 +411,11 @@ def _local_task_summary(uuid: str) -> TaskSummary | None:
         presentation_settings=_presentation_metadata_value(metadata),
     )
 
-
 def _clean_optional(value: str | None) -> str | None:
     if value is None:
         return None
     value = value.strip()
     return value or None
-
 
 def _validate_choice(value: str | None, allowed: set[str], field_name: str) -> str | None:
     if value is None:
@@ -460,7 +424,6 @@ def _validate_choice(value: str | None, allowed: set[str], field_name: str) -> s
         allowed_text = ", ".join(sorted(allowed))
         raise HTTPException(400, f"Geçersiz {field_name}: {value}. Beklenen: {allowed_text}")
     return value
-
 
 def _validate_capture_date(value: str | None) -> str | None:
     value = _clean_optional(value)
@@ -472,11 +435,9 @@ def _validate_capture_date(value: str | None) -> str | None:
         raise HTTPException(400, "capture_date YYYY-MM-DD formatında olmalı") from exc
     return value
 
-
 def _safe_storage_name(value: str) -> str:
     clean = value.strip().replace("\\", "_").replace("/", "_")
     return clean or datetime.utcnow().strftime("task_%Y%m%d_%H%M%S")
-
 
 def _normalize_task_metadata(
     *,
@@ -522,16 +483,10 @@ def _normalize_task_metadata(
         **museum_metadata,
     }
 
-
 async def _persist_uploads(
     images: list[UploadFile],
     local_dir: Path,
 ) -> list[tuple[str, Path]]:
-    """UploadFile içeriklerini diske stream ederek kaydeder.
-
-    Büyük foto setlerinde tüm dosyaları belleğe almak yerine, her dosya
-    doğrudan kalıcı klasöre yazılır ve NodeODM'e buradan yüklenir.
-    """
     stored_files: list[tuple[str, Path]] = []
     for index, img in enumerate(images, start=1):
         original_name = _clean_optional(img.filename) or f"image_{index:04d}.jpg"
@@ -554,16 +509,8 @@ async def _persist_uploads(
 
     return stored_files
 
-
-# --------------------------------------------------------------------- #
-# Uçlar
-# --------------------------------------------------------------------- #
 @router.get("", response_model=list[TaskSummary])
 async def list_tasks() -> list[TaskSummary]:
-    """NodeODM'deki tüm task'ların özetini döner.
-    NodeODM down olsa bile 500 atmaz — boş liste döner. (Health bar zaten
-    durumun ne olduğunu kullanıcıya söylüyor.)
-    """
     out: list[TaskSummary] = []
     live_uuids: set[str] = set()
 
@@ -587,10 +534,8 @@ async def list_tasks() -> list[TaskSummary]:
         if summary:
             out.append(summary)
 
-    # En yeniler üstte
     out.sort(key=lambda t: t.date_created or 0, reverse=True)
     return out
-
 
 @router.get("/{uuid}", response_model=TaskSummary)
 async def get_task(uuid: str) -> TaskSummary:
@@ -602,7 +547,6 @@ async def get_task(uuid: str) -> TaskSummary:
             return summary
         raise HTTPException(404, f"Task bulunamadı: {exc}") from exc
     return _summarize(info)
-
 
 @router.post("", response_model=TaskCreated)
 async def create_task(
@@ -624,7 +568,6 @@ async def create_task(
     collection_theme: str | None = Form(None),
     curator_contact: str | None = Form(None),
 ) -> TaskCreated:
-    """Yeni ODM görevi oluşturur ve fotoğrafları gönderir."""
     if not images:
         raise HTTPException(400, "En az bir fotoğraf gerekli")
     if len(images) < 5:
@@ -652,7 +595,6 @@ async def create_task(
     )
     task_name = metadata_payload["name"]
 
-    # Yerel kopyasını da sakla — debugging ve timeline için faydalı
     nodeodm_task_name = task_name or datetime.utcnow().strftime("task_%Y%m%d_%H%M%S")
     local_dir = settings.UPLOAD_DIR / _safe_storage_name(nodeodm_task_name)
     local_dir.mkdir(parents=True, exist_ok=True)
@@ -666,9 +608,6 @@ async def create_task(
         shutil.rmtree(local_dir, ignore_errors=True)
         raise HTTPException(400, "Yüklenen fotoğraflar boş")
 
-    # Varsayılan drone profili: kaliteli ortofoto için full ODM pipeline.
-    # Bu profil dense/OpenMVS aşamalarını korur; GPU mevcutsa bu aşamalarda
-    # devreye girer. Cesium tarafında yine ana çıktı ortofotodur.
     options = [
         {"name": "auto-boundary", "value": True},
         {"name": "3d-tiles", "value": True},
@@ -697,7 +636,6 @@ async def create_task(
     )
 
     return TaskCreated(uuid=uuid, images_uploaded=len(files))
-
 
 @router.put("/{uuid}", response_model=TaskSummary)
 async def update_task(uuid: str, payload: TaskMetadataUpdate) -> TaskSummary:
@@ -768,7 +706,6 @@ async def update_task(uuid: str, payload: TaskMetadataUpdate) -> TaskSummary:
         return summary
     raise HTTPException(404, "Task bulunamadı")
 
-
 @router.delete("/{uuid}")
 async def delete_task(uuid: str) -> dict[str, str]:
     metadata = _read_metadata(uuid)
@@ -785,18 +722,11 @@ async def delete_task(uuid: str) -> dict[str, str]:
     _metadata_path(uuid).unlink(missing_ok=True)
     return {"status": "removed", "uuid": uuid}
 
-
-# --------------------------------------------------------------------- #
-# İndirme uçları — backend, NodeODM'den indirip diske kaydeder ve
-# frontend'e statik dosya olarak servis eder.
-# --------------------------------------------------------------------- #
 def _output_path(uuid: str, asset: str) -> Path:
     return settings.OUTPUT_DIR / uuid / asset
 
-
 def _output_dir(uuid: str) -> Path:
     return settings.OUTPUT_DIR / uuid
-
 
 def _find_first(uuid: str, *patterns: str) -> Path | None:
     base_dir = _output_dir(uuid)
@@ -805,7 +735,6 @@ def _find_first(uuid: str, *patterns: str) -> Path | None:
         if matches:
             return matches[0]
     return None
-
 
 def _find_orthophoto(uuid: str) -> Path | None:
     direct = _output_path(uuid, "orthophoto.tif")
@@ -818,7 +747,6 @@ def _find_orthophoto(uuid: str) -> Path | None:
         "odm_orthophoto.original.tif",
     )
 
-
 def _find_bounds_geojson(uuid: str) -> Path | None:
     return _find_first(
         uuid,
@@ -826,10 +754,8 @@ def _find_bounds_geojson(uuid: str) -> Path | None:
         "*.bounds.geojson",
     )
 
-
 def _find_georeference_info(uuid: str) -> Path | None:
     return _find_first(uuid, "odm_georeferenced_model.info.json")
-
 
 def _find_orthophoto_preview(uuid: str) -> Path | None:
     return _find_first(
@@ -838,7 +764,6 @@ def _find_orthophoto_preview(uuid: str) -> Path | None:
         "orthophoto.png",
         "odm_orthophoto.png",
     )
-
 
 def _find_point_cloud(uuid: str) -> Path | None:
     return _find_first(
@@ -851,7 +776,6 @@ def _find_point_cloud(uuid: str) -> Path | None:
         "*.las",
     )
 
-
 def _find_tileset(uuid: str) -> Path | None:
     base_dir = _output_dir(uuid)
     direct = base_dir / "3d_tiles" / "tileset.json"
@@ -859,7 +783,6 @@ def _find_tileset(uuid: str) -> Path | None:
         return direct
     matches = list(base_dir.rglob("tileset.json"))
     return matches[0] if matches else None
-
 
 def _extract_tiles_archive(uuid: str) -> Path | None:
     archive = _output_path(uuid, "3d_tiles.zip")
@@ -879,7 +802,6 @@ def _extract_tiles_archive(uuid: str) -> Path | None:
 
     tileset = target_dir / "tileset.json"
     return tileset if tileset.exists() else None
-
 
 def _generate_tileset_fallback(uuid: str, force: bool = False) -> Path | None:
     point_cloud = _find_point_cloud(uuid)
@@ -971,7 +893,6 @@ def _generate_tileset_fallback(uuid: str, force: bool = False) -> Path | None:
 
     return target_tileset if target_tileset.exists() else None
 
-
 def _parse_odm_utm_origin(uuid: str) -> tuple[int, bool, float, float] | None:
     path = _find_first(uuid, "odm_georeferencing_model_geo.txt", "coords.txt")
     if not path or not path.exists():
@@ -990,7 +911,6 @@ def _parse_odm_utm_origin(uuid: str) -> tuple[int, bool, float, float] | None:
     except (IndexError, TypeError, ValueError):
         return None
     return zone, northern, easting, northing
-
 
 def _utm_to_geodetic_radians(
     easting: float,
@@ -1039,7 +959,6 @@ def _utm_to_geodetic_radians(
     ) / cos_fp
     return lat, lon
 
-
 def _geodetic_to_ecef(lat_radians: float, lon_radians: float, height: float) -> tuple[float, float, float]:
     a = 6378137.0
     e2 = 0.00669437999014
@@ -1053,7 +972,6 @@ def _geodetic_to_ecef(lat_radians: float, lon_radians: float, height: float) -> 
         (n_val + height) * cos_phi * sin_lam,
         (n_val * (1.0 - e2) + height) * sin_phi,
     )
-
 
 def _ecef_to_geodetic(x: float, y: float, z: float) -> tuple[float, float, float]:
     a = 6378137.0
@@ -1072,13 +990,11 @@ def _ecef_to_geodetic(x: float, y: float, z: float) -> tuple[float, float, float
     height = p / max(math.cos(lat), 1e-12) - n_val
     return lat, lon, height
 
-
 def _vector_norm(vector: tuple[float, float, float]) -> tuple[float, float, float]:
     magnitude = math.sqrt(sum(component * component for component in vector))
     if magnitude == 0:
         raise ValueError("sifir uzunluklu vektor")
     return tuple(component / magnitude for component in vector)
-
 
 def _vector_cross(
     left: tuple[float, float, float],
@@ -1090,10 +1006,8 @@ def _vector_cross(
         left[0] * right[1] - left[1] * right[0],
     )
 
-
 def _vector_dot(left: tuple[float, float, float], right: tuple[float, float, float]) -> float:
     return sum(a * b for a, b in zip(left, right))
-
 
 def _glb_position_bounds(path: Path) -> tuple[list[float], list[float]] | None:
     try:
@@ -1132,7 +1046,6 @@ def _glb_position_bounds(path: Path) -> tuple[list[float], list[float]] | None:
         return None
     return mins, maxs
 
-
 def _glb_rtc_center(path: Path) -> tuple[float, float, float] | None:
     try:
         with path.open("rb") as fh:
@@ -1155,14 +1068,12 @@ def _glb_rtc_center(path: Path) -> tuple[float, float, float] | None:
         return None
     return values if all(math.isfinite(value) for value in values) else None
 
-
 def _glb_local_center(path: Path) -> tuple[float, float, float] | None:
     bounds = _glb_position_bounds(path)
     if not bounds:
         return None
     mins, maxs = bounds
     return tuple((float(mins[idx]) + float(maxs[idx])) / 2.0 for idx in range(3))
-
 
 def _tileset_transform_point(
     transform: list[float],
@@ -1179,7 +1090,6 @@ def _tileset_transform_point(
         )
     except (TypeError, ValueError):
         return None
-
 
 def _read_glb_payload(path: Path) -> tuple[dict[str, Any], bytes] | None:
     try:
@@ -1209,7 +1119,6 @@ def _read_glb_payload(path: Path) -> tuple[dict[str, Any], bytes] | None:
         return None
     return payload, binary
 
-
 def _write_glb_payload(path: Path, payload: dict[str, Any], binary: bytes) -> None:
     json_chunk = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     json_chunk += b" " * ((4 - (len(json_chunk) % 4)) % 4)
@@ -1224,7 +1133,6 @@ def _write_glb_payload(path: Path, payload: dict[str, Any], binary: bytes) -> No
         fh.write(struct.pack("<I4s", len(binary), b"BIN\x00"))
         fh.write(binary)
     temp_path.replace(path)
-
 
 def _clamp_glb_embedded_textures(path: Path, max_texture_size: int) -> list[tuple[int, tuple[int, int], tuple[int, int]]]:
     if max_texture_size <= 0 or not path.exists():
@@ -1328,7 +1236,6 @@ def _clamp_glb_embedded_textures(path: Path, max_texture_size: int) -> list[tupl
     )
     return resized
 
-
 def _clamp_output_glbs(uuid: str) -> None:
     max_texture_size = settings.MAX_GLTF_TEXTURE_SIZE
     if max_texture_size <= 0:
@@ -1342,28 +1249,18 @@ def _clamp_output_glbs(uuid: str) -> None:
         if path.exists():
             _clamp_glb_embedded_textures(path, max_texture_size)
 
-
 def _odm_glb_world_axes(
     east_basis: tuple[float, float, float],
     north_basis: tuple[float, float, float],
     up_basis: tuple[float, float, float],
 ) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
-    """ODM OBJ->GLB zinciri z-up veriyi koruyor; Cesium glTF'yi y-up varsayarak
-    z-up tile frame'ine ceviriyor. Root transform'u buna gore kompanse et."""
     return (
         east_basis,
         tuple(-component for component in up_basis),
         north_basis,
     )
 
-
 def _generate_tileset_from_glb(uuid: str) -> Path | None:
-    """ODM textured model GLB'sinden minimal 3D Tiles 1.1 tileset.json üretir.
-
-    py3dtiles Docker'ı olmadan çalışır; ODM'nin yazdığı UTM origin bilgisini
-    kullanıp GLB'yi Cesium'a doğru dünya matrisinde yerleştirir.
-    Gereksinimler: odm_textured_model_geo.glb + odm_georeferenced_model.info.json
-    """
     source_glb = _find_first(uuid, "odm_textured_model_geo.glb")
     if not source_glb or not source_glb.exists():
         return None
@@ -1531,8 +1428,6 @@ def _generate_tileset_from_glb(uuid: str) -> Path | None:
     basis_y = transform_basis_y
     basis_z = transform_basis_z
 
-    # 4×4 sütun-öncelikli dönüşüm matrisi.
-    # Kolonlar sırasıyla local X, local Y, local Z eksenlerinin dünyadaki yönleridir.
     transform = [
         basis_x[0], basis_x[1], basis_x[2], 0.0,
         basis_y[0], basis_y[1], basis_y[2], 0.0,
@@ -1544,8 +1439,6 @@ def _generate_tileset_from_glb(uuid: str) -> Path | None:
     target_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # ODM'nin textured GLB'si zaten Z-up çalışıyor; içeriğe ekstra eksen
-        # matrisi gömmek modeli 90° yanlış çevirip yüksekliği şişiriyor.
         shutil.copy2(source_glb, target_dir / "content.glb")
         glb_uri = "content.glb"
     except OSError:
@@ -1581,7 +1474,6 @@ def _generate_tileset_from_glb(uuid: str) -> Path | None:
     print(f"[tasks] GLB tabanlı tileset.json üretildi: {tileset_path}")
     return tileset_path
 
-
 def _tileset_looks_like_glb_fallback(path: Path | None) -> bool:
     if not path or not path.exists():
         return False
@@ -1594,7 +1486,6 @@ def _tileset_looks_like_glb_fallback(path: Path | None) -> bool:
         return False
     uri = uri.strip().lower()
     return uri.endswith(".glb") or uri.endswith(".gltf")
-
 
 def _glb_tileset_is_stale(uuid: str, tileset_path: Path | None) -> bool:
     if not tileset_path or not tileset_path.exists():
@@ -1622,9 +1513,6 @@ def _glb_tileset_is_stale(uuid: str, tileset_path: Path | None) -> bool:
         except OSError:
             return True
 
-    # Legacy GLB fallback tilesetleri yalnızca mtime ile ayırt edemiyoruz.
-    # Eski üretimlerde transform yanlışsa model bbox merkezinden kilometrelerce
-    # sapıyor veya yükseklik absürt oluyor; bu durumda yeniden üret.
     if source_glb and source_glb.exists():
         try:
             data = json.loads(tileset_path.read_text(encoding="utf-8"))
@@ -1661,7 +1549,6 @@ def _glb_tileset_is_stale(uuid: str, tileset_path: Path | None) -> bool:
                 return True
     return False
 
-
 def _ensure_best_tileset(uuid: str) -> Path | None:
     existing = _find_tileset(uuid)
     if existing and not _tileset_looks_like_glb_fallback(existing):
@@ -1689,7 +1576,6 @@ def _ensure_best_tileset(uuid: str) -> Path | None:
         return archive_tileset
     return _generate_tileset_from_glb(uuid)
 
-
 def _ensure_orthophoto_alias(uuid: str) -> Path | None:
     source = _find_orthophoto(uuid)
     if not source or not source.exists():
@@ -1703,7 +1589,6 @@ def _ensure_orthophoto_alias(uuid: str) -> Path | None:
     shutil.copy2(source, target)
     return target
 
-
 def _to_wsl_path(path: Path) -> str | None:
     raw = path.as_posix()
     if raw.startswith("/mnt/"):
@@ -1712,7 +1597,6 @@ def _to_wsl_path(path: Path) -> str | None:
         drive = raw[0].lower()
         return f"/mnt/{drive}/{raw[3:]}"
     return None
-
 
 def _ensure_orthophoto_tiles(uuid: str) -> Path | None:
     orthophoto = _ensure_orthophoto_alias(uuid)
@@ -1783,7 +1667,6 @@ def _ensure_orthophoto_tiles(uuid: str) -> Path | None:
 
     return tiles_dir if tilemap.exists() else None
 
-
 def _extract_bbox_from_geometry(geometry: dict[str, Any], coords: list[list[float]]) -> None:
     values = geometry.get("coordinates")
     if values is None:
@@ -1799,7 +1682,6 @@ def _extract_bbox_from_geometry(geometry: dict[str, Any], coords: list[list[floa
             walk(item)
 
     walk(values)
-
 
 def _bounds_bbox(uuid: str) -> list[float] | None:
     info_path = _find_georeference_info(uuid)
@@ -1855,10 +1737,8 @@ def _bounds_bbox(uuid: str) -> list[float] | None:
         max(latitudes),
     ]
 
-
 @router.post("/{uuid}/fetch")
 async def fetch_outputs(uuid: str) -> dict[str, Any]:
-    """Tamamlanan task'ın çıktılarını NodeODM'den indirip yerele kopyalar."""
     info = await odm.task_info(uuid)
     status = (info.get("status") or {}).get("code")
     if status != 40:
@@ -1899,10 +1779,8 @@ async def fetch_outputs(uuid: str) -> dict[str, Any]:
     }
     return {"uuid": uuid, "fetched": fetched}
 
-
 @router.get("/{uuid}/orthophoto/url")
 async def orthophoto_url(uuid: str) -> dict[str, Any]:
-    """Yerelde kayıtlı ortofotoyu HTTP yolu olarak döner."""
     p = _ensure_orthophoto_alias(uuid)
     if not p or not p.exists():
         raise HTTPException(404, "Ortofoto henüz indirilmemiş — /fetch çağır")
@@ -1915,7 +1793,6 @@ async def orthophoto_url(uuid: str) -> dict[str, Any]:
     if bbox:
         payload["bbox"] = bbox
     return payload
-
 
 @router.get("/{uuid}/tileset/url")
 async def tileset_url(uuid: str) -> dict[str, str]:
@@ -1937,7 +1814,6 @@ async def tileset_url(uuid: str) -> dict[str, str]:
     except OSError:
         version = 0
     return {"url": f"/data/outputs/{rel.as_posix()}?v={version}"}
-
 
 @router.get("/{uuid}/bounds")
 async def bounds(uuid: str) -> dict[str, Any]:

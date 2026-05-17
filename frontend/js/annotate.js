@@ -1,9 +1,5 @@
-/* Ekran görüntüsü üzerine anotasyon — Fabric.js 5.x
- * Araçlar: Seçim, Kalem, Ok, Dikdörtgen, Daire/Elips, Metin
- * Kısayollar: V P A R C T | Del | Ctrl+Z | Esc
- */
 window.AppAnnotate = (() => {
-  let fc = null;       // fabric.Canvas instance
+  let fc = null;
   let _tool = 'select';
   let _color = '#f85149';
   let _width = 3;
@@ -14,8 +10,6 @@ window.AppAnnotate = (() => {
   let _histPtr = -1;
   const MAX_HIST = 30;
 
-  /* ---- open / close ----------------------------------------- */
-
   function open(dataUrl) {
     const modal = document.getElementById('modal-annotate');
     if (!modal) return;
@@ -24,7 +18,6 @@ window.AppAnnotate = (() => {
     if (fc) { try { fc.dispose(); } catch {} fc = null; }
     _history = []; _histPtr = -1;
 
-    // Delay so modal has rendered and clientWidth/Height are valid
     setTimeout(() => _initCanvas(dataUrl), 40);
   }
 
@@ -67,8 +60,6 @@ window.AppAnnotate = (() => {
     _history = []; _histPtr = -1;
   }
 
-  /* ---- history (undo) --------------------------------------- */
-
   function _snapshot() {
     if (!fc) return;
     const json = JSON.stringify(fc.toJSON());
@@ -84,8 +75,6 @@ window.AppAnnotate = (() => {
     fc.loadFromJSON(_history[_histPtr], () => fc.renderAll());
   }
 
-  /* ---- tool selection --------------------------------------- */
-
   function setTool(tool) {
     _tool = tool;
     document.querySelectorAll('.annotate-tool-btn[data-tool]').forEach(b => {
@@ -93,7 +82,6 @@ window.AppAnnotate = (() => {
     });
     if (!fc) return;
 
-    // Reset canvas modes
     fc.isDrawingMode = false;
     fc.selection = false;
     fc.defaultCursor = 'crosshair';
@@ -118,8 +106,6 @@ window.AppAnnotate = (() => {
       fc.on('mouse:up',   _handleShapeUp);
     }
   }
-
-  /* ---- shape drawing handlers ------------------------------- */
 
   function _handleTextDown(opt) {
     if (opt.target) return;
@@ -195,7 +181,6 @@ window.AppAnnotate = (() => {
 
     if (_activeObj) {
       if (_tool === 'arrow') {
-        // Çizgiden gerçek ok yap
         const l = _activeObj;
         fc.remove(l);
         const arrow = _makeArrow(l.x1, l.y1, l.x2, l.y2);
@@ -238,21 +223,16 @@ window.AppAnnotate = (() => {
     );
   }
 
-  /* ---- canvas lifecycle events ------------------------------ */
-
   function _bindCanvasEvents() {
     fc.on('object:modified',     () => _snapshot());
     fc.on('path:created',        () => _snapshot());
     fc.on('text:editing:exited', () => _snapshot());
   }
 
-  /* ---- color / width ---------------------------------------- */
-
   function setColor(c) {
     _color = c;
     const preview = document.getElementById('annotate-color-preview');
     if (preview) preview.style.background = c;
-    // sync preset buttons
     document.querySelectorAll('.annotate-preset-color').forEach(b => {
       b.classList.toggle('active', b.dataset.color === c);
     });
@@ -265,8 +245,6 @@ window.AppAnnotate = (() => {
     if (lbl) lbl.textContent = _width;
     if (fc?.isDrawingMode) fc.freeDrawingBrush.width = _width;
   }
-
-  /* ---- actions ---------------------------------------------- */
 
   function deleteSelected() {
     if (!fc) return;
@@ -296,8 +274,6 @@ window.AppAnnotate = (() => {
     a.click();
   }
 
-  /* ---- bind -------------------------------------------------- */
-
   function bind() {
     document.getElementById('btn-annotate-close')?.addEventListener('click', close);
     document.getElementById('btn-annotate-download')?.addEventListener('click', download);
@@ -309,7 +285,6 @@ window.AppAnnotate = (() => {
       btn.addEventListener('click', () => setTool(btn.dataset.tool));
     });
 
-    // Preset color chips
     document.querySelectorAll('.annotate-preset-color').forEach(btn => {
       btn.addEventListener('click', () => {
         const c = btn.dataset.color;
@@ -321,10 +296,8 @@ window.AppAnnotate = (() => {
     document.getElementById('annotate-color')?.addEventListener('input', e => setColor(e.target.value));
     document.getElementById('annotate-width')?.addEventListener('input', e => setWidth(e.target.value));
 
-    // Başlangıç color preview sync
     setColor('#f85149');
 
-    // Keyboard shortcuts
     document.addEventListener('keydown', e => {
       const modal = document.getElementById('modal-annotate');
       if (modal?.classList.contains('hidden')) return;

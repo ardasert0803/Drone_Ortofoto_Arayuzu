@@ -1,12 +1,7 @@
-/* ============================================================
- * Sektörel Cesium — Modern Glassmorphism UI
- * Saydam gri paneller + backdrop blur + hafif animasyonlar
- * ========================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  /* Saydam gri tonları */
   --glass-bg:        rgba(22, 27, 34, 0.55);
   --glass-bg-2:      rgba(31, 38, 48, 0.65);
   --glass-bg-3:      rgba(48, 56, 70, 0.55);
@@ -34,7 +29,6 @@
   --easing:      cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ----------------------------- reset --------------------------------- */
 * { box-sizing: border-box; }
 html, body {
   margin: 0; height: 100%; overflow: hidden;
@@ -51,21 +45,17 @@ body {
   grid-template-rows: 100vh;
 }
 
-/* ----------------------- Cesium tam ekran ---------------------------- */
 #cesiumContainer {
   width: 100%; height: 100%;
   background: #000;
-  grid-column: 1 / -1;       /* paneller absolute olacak */
+  grid-column: 1 / -1;
   grid-row: 1;
 }
 .cesium-viewer-bottom { z-index: 5; }
 
-/* Cesium'un kendi credit/widget'larını biraz şeffaflaştır */
 .cesium-widget-credits { opacity: 0.6; }
+.cesium-viewer-toolbar { display: none !important; }
 
-/* ============================================================
- *  ANIMASYONLAR
- * ========================================================== */
 @keyframes fadeSlideIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -87,9 +77,6 @@ body {
   100% { background-position: 200% 0; }
 }
 
-/* ============================================================
- *  PANELLER (sol & sağ — glassmorphism)
- * ========================================================== */
 aside {
   position: absolute;
   top: 16px;
@@ -125,7 +112,6 @@ aside::-webkit-scrollbar-thumb {
   animation: slideInRight 0.5s var(--easing);
 }
 
-/* ----------------- Panel başlığı (proje adı + branding) ------------- */
 .brand {
   display: flex; align-items: center; gap: 10px;
   padding: 4px 2px 12px;
@@ -170,9 +156,6 @@ aside h3 {
   line-height: 1.45;
 }
 
-/* ============================================================
- *  KULLANIM ALANI SEÇİCİ (Şantiye / Kültürel Miras)
- * ========================================================== */
 .use-case {
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
   padding: 6px;
@@ -201,9 +184,6 @@ aside h3 {
   margin-top: 4px;
 }
 
-/* ============================================================
- *  BUTONLAR
- * ========================================================== */
 button {
   background: var(--glass-bg-2);
   color: var(--text);
@@ -241,9 +221,6 @@ button.active {
   color: var(--accent);
 }
 
-/* ============================================================
- *  GÖREV LİSTESİ
- * ========================================================== */
 .task-list { list-style: none; padding: 0; margin: 0;
   display: flex; flex-direction: column; gap: 6px; }
 .task-list li {
@@ -341,9 +318,6 @@ button.active {
   gap: 6px;
 }
 
-/* ============================================================
- *  SAĞ PANEL — KATMANLAR / ARAÇLAR
- * ========================================================== */
 .panel {
   background: var(--glass-bg-2);
   border: 1px solid var(--glass-border);
@@ -356,7 +330,6 @@ button.active {
   display: none !important;
 }
 
-/* Toggle (custom checkbox) */
 .toggle {
   display: flex; align-items: center; gap: 10px;
   font-size: 12.5px; cursor: pointer; user-select: none;
@@ -610,9 +583,6 @@ button.active {
   color: var(--text-soft);
 }
 
-/* ============================================================
- *  PROJE BİLGİ KARTI (PDF konseptini özetler)
- * ========================================================== */
 .info-card {
   background: linear-gradient(135deg,
     rgba(79, 158, 255, 0.08) 0%,
@@ -634,9 +604,6 @@ button.active {
   background: rgba(0,0,0,0.2);
 }
 
-/* ============================================================
- *  MODAL (yeni görev)
- * ========================================================== */
 .modal {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.55);
@@ -1107,9 +1074,6 @@ button.active {
   color: #ffd3cf;
 }
 
-/* ============================================================
- *  PROJE BİLGİ ŞERİDİ (üstte yatay küçük strip)
- * ========================================================== */
 .top-strip {
   position: absolute;
   top: 16px; left: 50%; transform: translateX(-50%);
@@ -1168,7 +1132,6 @@ a.button-link:hover {
   transform: translateY(-1px);
 }
 
-/* Responsive — küçük ekranlarda yan paneller daralsın */
 @media (max-width: 1100px) {
   :root { --sidebar-w: 280px; }
   .modal-card {
@@ -1255,10 +1218,6 @@ a.button-link:hover {
     grid-template-columns: 1fr;
   }
 }
-
-/* ========================================================
- * Şantiye modu — sol sidebar
- * ====================================================== */
 
 #sidebar-construction {
   display: flex;
@@ -1347,6 +1306,33 @@ a.button-link:hover {
   gap: 8px;
 }
 
+.constr-description-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 13px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+}
+
+.constr-description-label {
+  font-size: 9.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.constr-description-text {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .constr-stat {
   display: flex;
   align-items: center;
@@ -1383,10 +1369,6 @@ a.button-link:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* ========================================================
- * Şantiye modu — sağ sidebar (panel-site-info, ölçüm)
- * ====================================================== */
 
 .site-info-content {
   display: flex;
@@ -1432,10 +1414,6 @@ a.button-link:hover {
   line-height: 1.5;
 }
 
-/* ========================================================
- * Saha Özeti — başlık + status pill
- * ====================================================== */
-
 .site-info-hd {
   display: flex;
   align-items: center;
@@ -1465,7 +1443,6 @@ a.button-link:hover {
 .site-status-pill.danger  { background: rgba(248,81,73,.13);  border-color: rgba(248,81,73,.3);   color: var(--danger); }
 .site-status-pill.info    { background: rgba(79,158,255,.13); border-color: rgba(79,158,255,.3);  color: var(--accent); }
 
-/* Mini kart grid (konum, tarih) */
 .site-info-content {
   display: flex;
   flex-direction: column;
@@ -1549,7 +1526,6 @@ a.button-link:hover {
   padding: 6px 0;
 }
 
-/* "Sahaya Uç" — tam genişlik primary */
 .site-fly-btn {
   width: 100%;
   justify-content: center;
@@ -1558,7 +1534,6 @@ a.button-link:hover {
   font-weight: 600;
 }
 
-/* İkincil aksiyonlar */
 .site-secondary-actions {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1591,7 +1566,6 @@ a.button-link:hover {
   text-align: center;
 }
 
-/* Ölçüm paneli — 3'lü grid */
 .tool-row {
   display: flex;
   flex-wrap: wrap;
@@ -1606,7 +1580,6 @@ a.button-link:hover {
   padding: 7px 6px;
 }
 
-/* Ölçüm aracı kartları — ikon üst, label alt */
 .measure-tools-grid {
   gap: 5px;
 }
@@ -1672,7 +1645,6 @@ a.button-link:hover {
   opacity: 1;
 }
 
-/* Result wrap — sonuç + kopyala/temizle yan yana */
 .measure-result-wrap {
   display: flex;
   flex-direction: column;
@@ -1693,7 +1665,6 @@ a.button-link:hover {
   align-self: unset;
 }
 
-/* Clear — tam satır, danger tonu */
 .measure-clear-btn {
   flex: 1;
   justify-content: center;
@@ -1710,13 +1681,11 @@ a.button-link:hover {
   transform: none;
 }
 
-/* Result "recording" efekti — aktif ölçüm sırasında */
 #measurement-result.recording {
   border-color: rgba(245, 158, 11, 0.38);
   box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.12) inset;
 }
 
-/* Sonuç alanı çok satır için */
 #measurement-result {
   white-space: pre-line;
   min-height: 52px;
@@ -1725,16 +1694,11 @@ a.button-link:hover {
   line-height: 1.6;
 }
 
-/* Kopyala butonu — .measure-result-bar içinde override edilir */
 #btn-copy-measurement {
   font-size: 11px;
   padding: 4px 12px;
   align-self: flex-start;
 }
-
-/* ========================================================
- * Ölçüm doğruluk uyarısı
- * ====================================================== */
 
 .measurement-disclaimer {
   margin-top: 6px;
@@ -1746,10 +1710,6 @@ a.button-link:hover {
   color: rgba(245, 158, 11, 0.85);
   line-height: 1.5;
 }
-
-/* ========================================================
- * Saha Notları paneli
- * ====================================================== */
 
 .note-add-btn {
   width: 100%;
@@ -1775,7 +1735,6 @@ a.button-link:hover {
   min-height: 14px;
 }
 
-/* ----- Kategori picker (2x2 buton grubu) ----- */
 .note-cat-picker {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1843,8 +1802,6 @@ a.button-link:hover {
   font-size: 12px;
   padding: 6px 8px;
 }
-
-/* Notlar listesi */
 
 .notes-list {
   display: flex;
@@ -1927,13 +1884,6 @@ a.button-link:hover {
   color: var(--danger);
 }
 
-/* eski .site-row stilleri artık .site-mini-card tarafından karşılanıyor */
-
-/* ========================================================
- * SVG icon sistemi — CSS mask-image ile renklendirme
- * Kullanım: <span class="icon icon-XXX"></span>
- * ====================================================== */
-
 .icon {
   display: inline-block;
   flex-shrink: 0;
@@ -1950,7 +1900,6 @@ a.button-link:hover {
   line-height: 1;
 }
 
-/* Ölçüm araçları */
 .icon-ruler      { -webkit-mask-image: url('/icons/outline/ruler.svg'); mask-image: url('/icons/outline/ruler.svg'); }
 .icon-polygon    { -webkit-mask-image: url('/icons/outline/polygon.svg'); mask-image: url('/icons/outline/polygon.svg'); }
 .icon-height     { -webkit-mask-image: url('/icons/filled/arrow-autofit-height.svg'); mask-image: url('/icons/filled/arrow-autofit-height.svg'); }
@@ -1958,27 +1907,22 @@ a.button-link:hover {
 .icon-location   { -webkit-mask-image: url('/icons/filled/current-location.svg'); mask-image: url('/icons/filled/current-location.svg'); }
 .icon-trash      { -webkit-mask-image: url('/icons/filled/trash.svg'); mask-image: url('/icons/filled/trash.svg'); }
 
-/* Harita / navigasyon */
 .icon-pin        { -webkit-mask-image: url('/icons/filled/map-pin.svg'); mask-image: url('/icons/filled/map-pin.svg'); }
 .icon-navigation { -webkit-mask-image: url('/icons/filled/navigation.svg'); mask-image: url('/icons/filled/navigation.svg'); }
 .icon-compass    { -webkit-mask-image: url('/icons/filled/compass.svg'); mask-image: url('/icons/filled/compass.svg'); }
 
-/* Aksiyon / UI */
 .icon-refresh    { -webkit-mask-image: url('/icons/outline/refresh.svg'); mask-image: url('/icons/outline/refresh.svg'); }
 .icon-camera     { -webkit-mask-image: url('/icons/filled/camera.svg'); mask-image: url('/icons/filled/camera.svg'); }
 .icon-cube       { -webkit-mask-image: url('/icons/outline/cube.svg'); mask-image: url('/icons/outline/cube.svg'); }
 .icon-pencil     { -webkit-mask-image: url('/icons/filled/pencil.svg'); mask-image: url('/icons/filled/pencil.svg'); }
 
-/* Meta bilgi */
 .icon-calendar   { -webkit-mask-image: url('/icons/filled/calendar.svg'); mask-image: url('/icons/filled/calendar.svg'); }
 .icon-bolt       { -webkit-mask-image: url('/icons/filled/bolt.svg'); mask-image: url('/icons/filled/bolt.svg'); }
 
-/* Not kategorileri */
 .icon-alert-tri  { -webkit-mask-image: url('/icons/filled/alert-triangle.svg'); mask-image: url('/icons/filled/alert-triangle.svg'); }
 .icon-alert-oct  { -webkit-mask-image: url('/icons/filled/alert-octagon.svg'); mask-image: url('/icons/filled/alert-octagon.svg'); }
 .icon-check-circ { -webkit-mask-image: url('/icons/filled/circle-check.svg'); mask-image: url('/icons/filled/circle-check.svg'); }
 
-/* Buton içi icon: metin ile aynı hizada, biraz daha büyük */
 button .icon {
   width: 13px;
   height: 13px;
@@ -1986,7 +1930,6 @@ button .icon {
   opacity: 0.85;
 }
 
-/* Küçük meta ikon (constr-site-meta içinde) */
 .constr-site-meta .icon {
   width: 12px;
   height: 12px;
@@ -1994,17 +1937,12 @@ button .icon {
   color: var(--muted);
 }
 
-/* Stat kartı içi ikon */
 .constr-stat-icon.icon {
   width: 18px;
   height: 18px;
   color: var(--accent);
   flex-shrink: 0;
 }
-
-/* ========================================================
- * Not detay popup'u
- * ====================================================== */
 
 .note-popup {
   position: fixed;
@@ -2144,10 +2082,6 @@ button .icon {
   margin-right: 0;
 }
 
-/* ============================================================
- *  ANOTASYON MODALI (Ekran Görüntüsü Notlandırma)
- * ========================================================== */
-
 .annotate-overlay {
   position: fixed;
   inset: 0;
@@ -2165,7 +2099,6 @@ button .icon {
   overflow: hidden;
 }
 
-/* ---- Toolbar ---- */
 .annotate-toolbar {
   flex-shrink: 0;
   display: flex;
@@ -2197,7 +2130,6 @@ button .icon {
 
 .annotate-toolbar-spacer { flex: 1; }
 
-/* Tool buttons */
 .annotate-tool-btn {
   display: inline-flex;
   align-items: center;
@@ -2231,7 +2163,6 @@ button .icon {
 .annotate-tool-btn.active .icon,
 .annotate-tool-btn.active svg { opacity: 1; }
 
-/* Primary action (İndir) */
 .annotate-btn-primary {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
   border-color: transparent;
@@ -2246,7 +2177,6 @@ button .icon {
   color: white;
 }
 
-/* Close button */
 .annotate-btn-close {
   font-size: 18px;
   padding: 4px 10px;
@@ -2255,7 +2185,6 @@ button .icon {
 }
 .annotate-btn-close:hover { color: var(--text); }
 
-/* ---- Renk presetleri ---- */
 .annotate-style-group {
   gap: 6px;
 }
@@ -2321,7 +2250,6 @@ button .icon {
 .annotate-color-preview:hover { transform: scale(1.15); }
 .annotate-color-label:hover .annotate-color-preview { border-color: rgba(255,255,255,0.6); }
 
-/* Width slider */
 .annotate-width-wrap {
   display: flex;
   align-items: center;
@@ -2355,7 +2283,6 @@ button .icon {
   text-align: center;
 }
 
-/* ---- Canvas area ---- */
 .annotate-canvas-area {
   flex: 1;
   display: flex;
@@ -2366,7 +2293,6 @@ button .icon {
   background: #080b0f;
 }
 
-/* Fabric.js canvas-container wrapper */
 .annotate-canvas-area .canvas-container {
   box-shadow: 0 8px 48px rgba(0,0,0,0.7);
   border-radius: 4px;
@@ -2377,9 +2303,6 @@ button .icon {
   display: block;
 }
 
-/* ============================================================
- *  YENİ İKONLAR (Sunum Modu için)
- * ========================================================== */
 .icon-presentation  { -webkit-mask-image: url('/icons/filled/presentation.svg');  mask-image: url('/icons/filled/presentation.svg'); }
 .icon-adjustments   { -webkit-mask-image: url('/icons/filled/adjustments.svg');   mask-image: url('/icons/filled/adjustments.svg'); }
 .icon-player-play   { -webkit-mask-image: url('/icons/filled/player-play.svg');   mask-image: url('/icons/filled/player-play.svg'); }
@@ -2390,11 +2313,6 @@ button .icon {
 .icon-info-circle   { -webkit-mask-image: url('/icons/filled/info-circle.svg');   mask-image: url('/icons/filled/info-circle.svg'); }
 .icon-star          { -webkit-mask-image: url('/icons/filled/star.svg');          mask-image: url('/icons/filled/star.svg'); }
 
-/* ============================================================
- *  SUNUM MODU — Ortofoto görünür, kartlar altta yüzer
- * ========================================================== */
-
-/* Kenar paneller + top-strip sunum modunda gizlenir */
 body.pres-active #sidebar-left,
 body.pres-active #sidebar-right,
 body.pres-active .top-strip {
@@ -2403,7 +2321,6 @@ body.pres-active .top-strip {
   transition: opacity 0.3s ease;
 }
 
-/* ---- Launch button (müze detay panelinde) ---------------- */
 .museum-presentation-actions {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -2469,19 +2386,17 @@ body.pres-active .top-strip {
   color: var(--muted);
 }
 
-/* ---- Şeffaf tam-ekran overlay — ortofoto görünür --------- */
 .pres-overlay {
   position: fixed;
   inset: 0;
   z-index: 1200;
-  background: transparent;          /* Cesium arkaplanda görünür */
+  background: transparent;
   display: flex;
   flex-direction: column;
-  pointer-events: none;             /* tıklamalar Cesium'a geçer */
+  pointer-events: none;
 }
 .pres-overlay.hidden { display: none; }
 
-/* ---- Top HUD bar ----------------------------------------- */
 .pres-topbar {
   flex-shrink: 0;
   pointer-events: auto;
@@ -2490,7 +2405,6 @@ body.pres-active .top-strip {
   justify-content: space-between;
   padding: 0 20px;
   height: 52px;
-  /* üstten alta soluk gradient — kartlar ile yumuşak geçiş */
   background: linear-gradient(180deg, rgba(3,5,10,0.80) 0%, transparent 100%);
 }
 .pres-topbar-left {
@@ -2560,14 +2474,12 @@ body.pres-active .top-strip {
 }
 .pres-ctrl-icon { width: 15px; height: 15px; }
 
-/* ---- Kart stage'i ---------------------------------------- */
 .pres-stage {
   position: relative;
   flex: 1;
   pointer-events: none;
 }
 
-/* ---- Alt bilgi alanı: gradient + nav --------------------- */
 .pres-card-area {
   flex-shrink: 0;
   pointer-events: auto;
@@ -2627,7 +2539,6 @@ body.pres-active .top-strip {
     0 12px 40px rgba(0,0,0,0.48);
 }
 
-/* ---- Kart içi (glassmorphism panel) ---------------------- */
 .pres-card-inner {
   width: 100%;
   height: 100%;
@@ -2659,7 +2570,6 @@ body.pres-active .top-strip {
   color: var(--card-kicker);
 }
 
-/* ---- Kart üst accent çizgisi ----------------------------- */
 .pres-card-accent {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -2667,7 +2577,6 @@ body.pres-active .top-strip {
   border-radius: 16px 16px 0 0;
 }
 
-/* ---- Kicker ---------------------------------------------- */
 .pres-card-kicker {
   display: inline-block;
   font-size: 0.6rem;
@@ -2686,7 +2595,6 @@ body.pres-active .top-strip {
   margin-bottom: 14px;
 }
 
-/* ---- Hero kart ------------------------------------------- */
 .pres-hero-card {
   background:
     radial-gradient(ellipse at 85% 0%, rgba(245,158,11,0.14) 0%, transparent 55%),
@@ -2733,7 +2641,6 @@ body.pres-active .top-strip {
   opacity: 1;
 }
 
-/* ---- Metin kartı ----------------------------------------- */
 .pres-card-subtitle {
   margin: 0 0 10px;
   font-size: 1rem;
@@ -2779,7 +2686,6 @@ body.pres-active .top-strip {
   border-radius: 0;
 }
 
-/* ---- Ziyaret kartı --------------------------------------- */
 .pres-visit-grid {
   display: flex;
   flex-direction: column;
@@ -2816,7 +2722,6 @@ body.pres-active .top-strip {
   line-height: 1.45;
 }
 
-/* ---- Footer: dots + nav ---------------------------------- */
 .pres-footer {
   display: flex;
   align-items: center;
@@ -2858,7 +2763,6 @@ body.pres-active .top-strip {
 }
 .pres-dot.active { width: 22px; background: #f59e0b; }
 
-/* ---- İlerleme çizgisi ------------------------------------ */
 .pres-progress-track {
   position: absolute;
   bottom: 0;
@@ -2874,7 +2778,6 @@ body.pres-active .top-strip {
   border-radius: 0 2px 2px 0;
 }
 
-/* ---- Sunum ayar modalı ----------------------------------- */
 .pres-settings-modal-card {
   width: min(1320px, calc(100vw - 40px));
   max-height: min(92vh, 980px);

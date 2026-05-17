@@ -1,4 +1,3 @@
-/* CesiumJS viewer kurulumu + katman yönetimi. */
 window.AppViewer = (() => {
   let viewer = null;
   let currentMode = "drone";
@@ -7,20 +6,25 @@ window.AppViewer = (() => {
   let persistentClickLogger = null;
   let terrainHandle = null;
   let terrainReadyPromise = null;
+  let toolbarObserver = null;
 
-  const orthophotoLayers = new Map();     // uuid -> ImageryLayer
-  const orthophotoMeta = new Map();       // uuid -> debug info
-  const tilesets = new Map();             // key(pipeline:uuid) -> Cesium3DTileset
-  const boundingSpheres = new Map();      // key(pipeline:uuid) -> BoundingSphere
-  const tileDebugMeta = new Map();        // key(pipeline:uuid) -> debug info
-  const glbBoundsCache = new Map();       // contentUrl -> { mins, maxs }
+  const orthophotoLayers = new Map();
+  const orthophotoMeta = new Map();
+  const tilesets = new Map();
+  const boundingSpheres = new Map();
+  const tileDebugMeta = new Map();
+  const glbBoundsCache = new Map();
   const tilesetEditorState = {
     key: null,
     entities: [],
     handler: null,
     onChange: null,
     repeatTimer: null,
+    targets: [],
+    hoveredTargetId: null,
+    cameraState: null,
   };
+  let tilesetEditorTargetSeq = 0;
 
   let orthoVisible = true;
   let droneTilesVisible = true;
@@ -28,8 +32,8 @@ window.AppViewer = (() => {
   let osmVisible = false;
 
   let _orbitHandler = null;
-  let _orbitState   = null;
-  let _orbitPaused  = false;
+  let _orbitState = null;
+  let _orbitPaused = false;
 
   function _key(uuid, pipeline = "drone") {
     return `${pipeline}:${uuid}`;
@@ -63,16 +67,66 @@ window.AppViewer = (() => {
     }
   }
 
+  function _removeCesiumToolbar() {
+    const container = viewer?.container;
+    if (!container) return;
+
+    const removeToolbars = () => {
+      container.querySelectorAll(".cesium-viewer-toolbar").forEach((element) => {
+        element.hidden = true;
+        element.remove();
+      });
+    };
+
+    removeToolbars();
+
+    if (toolbarObserver) return;
+    toolbarObserver = new MutationObserver(() => {
+      removeToolbars();
+    });
+    toolbarObserver.observe(container, { childList: true, subtree: true });
+  }
+
+  async function _validateIonToken(ionToken) {
+    if (!ionToken) return { ok: false, reason: "missing" };
+    const suffix = ionToken.slice(-8);
+    try {
+      const response = await fetch("https://api.cesium.com/v1/assets/1/endpoint", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${ionToken}` },
+        cache: "no-store",
+      });
+      if (response.ok) {
+        console.info(`Cesium ion token dogrulandi (...${suffix}).`);
+        return { ok: true };
+      }
+      let details = "";
+      try {
+        const payload = await response.json();
+        details = payload?.code || payload?.message || "";
+      } catch {
+        details = "";
+      }
+      console.warn(`Cesium ion token reddedildi (...${suffix}) [${response.status}] ${details}`.trim());
+      return { ok: false, reason: details || `http_${response.status}` };
+    } catch (error) {
+      console.warn(`Cesium ion token dogrulanamadi (...${suffix}).`, error);
+      return { ok: false, reason: "network" };
+    }
+  }
+
   async function init(ionToken) {
-    if (ionToken) {
-      Cesium.Ion.defaultAccessToken = ionToken;
+    const ionStatus = await _validateIonToken(ionToken);
+    const activeIonToken = ionStatus.ok ? ionToken : "";
+    if (activeIonToken) {
+      Cesium.Ion.defaultAccessToken = activeIonToken;
     }
 
     const opts = {
       timeline: false,
       animation: false,
-      sceneModePicker: true,
-      baseLayerPicker: true,
+      sceneModePicker: false,
+      baseLayerPicker: false,
       geocoder: false,
       navigationHelpButton: false,
       homeButton: false,
@@ -80,7 +134,7 @@ window.AppViewer = (() => {
       selectionIndicator: false,
       contextOptions: { webgl: { preserveDrawingBuffer: true } },
     };
-    if (ionToken) {
+    if (activeIonToken) {
       try {
         terrainHandle = Cesium.Terrain.fromWorldTerrain();
         terrainReadyPromise = null;
@@ -93,12 +147,12 @@ window.AppViewer = (() => {
     }
 
     viewer = new Cesium.Viewer("cesiumContainer", opts);
-    viewer.scene.globe.depthTestAgainstTerrain = true;
+    _removeCesiumToolbar();
+    viewer.scene.globe.depthTestAgainstTerrain = !!activeIonToken;
     viewer.scene.skyAtmosphere.show = true;
 
     Cesium.Camera.DEFAULT_VIEW_RECTANGLE = Cesium.Rectangle.fromDegrees(25.5, 35.5, 45.0, 42.5);
 
-    // Başlangıç: globe açısı — önce anında bir noktaya otur, sonra animasyon
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(35.0, 39.0, 14_000_000),
       orientation: { heading: 0, pitch: Cesium.Math.toRadians(-75), roll: 0 },
@@ -323,16 +377,147 @@ window.AppViewer = (() => {
     viewer.scene.requestRender();
   }
 
+  function _windowPositionFromCartesian(cartesian) {
+    if (!viewer || !cartesian) return null;
+    const point = Cesium.SceneTransforms.wgs84ToWindowCoordinates(
+      viewer.scene,
+      cartesian,
+      new Cesium.Cartesian2(),
+    );
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+    return point;
+  }
+
+  function _screenDistanceToPoint(left, right) {
+    if (!left || !right) return Number.POSITIVE_INFINITY;
+    return Math.hypot(left.x - right.x, left.y - right.y);
+  }
+
+  function _screenDistanceToSegment(point, start, end) {
+    if (!point || !start || !end) return Number.POSITIVE_INFINITY;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSq = (dx * dx) + (dy * dy);
+    if (lengthSq <= 0.0001) return _screenDistanceToPoint(point, start);
+    const t = Math.max(0, Math.min(1, (((point.x - start.x) * dx) + ((point.y - start.y) * dy)) / lengthSq));
+    const projection = { x: start.x + (dx * t), y: start.y + (dy * t) };
+    return _screenDistanceToPoint(point, projection);
+  }
+
+  function _setTilesetEditorHover(targetId = null) {
+    if (tilesetEditorState.hoveredTargetId === targetId) return;
+    tilesetEditorState.hoveredTargetId = targetId;
+    for (const target of tilesetEditorState.targets) {
+      const hovered = target.id === targetId;
+      if (target.lineEntity?.polyline) {
+        target.lineEntity.polyline.width = hovered ? target.baseLineWidth + 4 : target.baseLineWidth;
+      }
+      if (target.pointEntity?.point) {
+        target.pointEntity.point.pixelSize = hovered ? target.basePointSize + 6 : target.basePointSize;
+        target.pointEntity.point.outlineWidth = hovered ? target.basePointOutlineWidth + 1 : target.basePointOutlineWidth;
+      }
+      if (target.labelEntity?.label) {
+        target.labelEntity.label.scale = hovered ? 1.08 : 1.0;
+        target.labelEntity.label.backgroundColor = hovered
+          ? target.baseLabelColor.withAlpha(0.96)
+          : target.baseLabelColor.withAlpha(0.82);
+      }
+    }
+    if (viewer?.canvas) {
+      viewer.canvas.style.cursor = targetId ? "pointer" : "";
+    }
+    viewer?.scene?.requestRender?.();
+  }
+
+  function _pauseTilesetEditorCameraControls() {
+    if (!viewer || tilesetEditorState.cameraState) return;
+    const controller = viewer.scene?.screenSpaceCameraController;
+    if (!controller) return;
+    tilesetEditorState.cameraState = {
+      enableRotate: controller.enableRotate,
+      enableTranslate: controller.enableTranslate,
+      enableTilt: controller.enableTilt,
+      enableLook: controller.enableLook,
+    };
+    controller.enableRotate = false;
+    controller.enableTranslate = false;
+    controller.enableTilt = false;
+    controller.enableLook = false;
+  }
+
+  function _resumeTilesetEditorCameraControls() {
+    if (!viewer || !tilesetEditorState.cameraState) return;
+    const controller = viewer.scene?.screenSpaceCameraController;
+    if (!controller) {
+      tilesetEditorState.cameraState = null;
+      return;
+    }
+    controller.enableRotate = tilesetEditorState.cameraState.enableRotate;
+    controller.enableTranslate = tilesetEditorState.cameraState.enableTranslate;
+    controller.enableTilt = tilesetEditorState.cameraState.enableTilt;
+    controller.enableLook = tilesetEditorState.cameraState.enableLook;
+    tilesetEditorState.cameraState = null;
+  }
+
+  function _registerTilesetEditorTarget(target) {
+    tilesetEditorState.targets.push(target);
+    for (const entity of target.entities) {
+      entity._scTilesetAdjust = target.patch;
+      entity._scTilesetAdjustId = target.id;
+      tilesetEditorState.entities.push(entity);
+    }
+  }
+
+  function _findTilesetEditorTarget(screenPosition) {
+    if (!viewer || !screenPosition) return null;
+
+    const picked = viewer.scene.drillPick(screenPosition, 10) || [];
+    for (const item of picked) {
+      const targetId = (item && item.id && item.id._scTilesetAdjustId)
+        || (item && item.primitive && item.primitive.id && item.primitive.id._scTilesetAdjustId)
+        || null;
+      if (!targetId) continue;
+      const match = tilesetEditorState.targets.find((target) => target.id === targetId);
+      if (match) return match;
+    }
+
+    let bestTarget = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const target of tilesetEditorState.targets) {
+      let distance = Number.POSITIVE_INFINITY;
+      if (typeof target.getSegment === "function") {
+        const segment = target.getSegment();
+        const start = _windowPositionFromCartesian(segment?.[0] || null);
+        const end = _windowPositionFromCartesian(segment?.[1] || null);
+        distance = Math.min(distance, _screenDistanceToSegment(screenPosition, start, end));
+      }
+      if (typeof target.getPosition === "function") {
+        const point = _windowPositionFromCartesian(target.getPosition());
+        distance = Math.min(distance, _screenDistanceToPoint(screenPosition, point));
+      }
+      if (typeof target.getLabelPosition === "function") {
+        const point = _windowPositionFromCartesian(target.getLabelPosition());
+        distance = Math.min(distance, _screenDistanceToPoint(screenPosition, point));
+      }
+      if (distance <= target.hitRadiusPx && distance < bestDistance) {
+        bestTarget = target;
+        bestDistance = distance;
+      }
+    }
+    return bestTarget;
+  }
+
   function _destroyTilesetEditor() {
     if (tilesetEditorState.repeatTimer) {
       window.clearInterval(tilesetEditorState.repeatTimer);
       tilesetEditorState.repeatTimer = null;
     }
+    _resumeTilesetEditorCameraControls();
+    _setTilesetEditorHover(null);
     if (tilesetEditorState.handler) {
       try {
         tilesetEditorState.handler.destroy();
       } catch (_) {
-        /* yoksay */
       }
       tilesetEditorState.handler = null;
     }
@@ -341,13 +526,14 @@ window.AppViewer = (() => {
         try {
           viewer.entities.remove(entity);
         } catch (_) {
-          /* yoksay */
         }
       }
     }
     tilesetEditorState.entities = [];
+    tilesetEditorState.targets = [];
     tilesetEditorState.key = null;
     tilesetEditorState.onChange = null;
+    tilesetEditorState.hoveredTargetId = null;
   }
 
   function _emitTilesetEditorChange(key) {
@@ -373,27 +559,43 @@ window.AppViewer = (() => {
 
   function _createTilesetEditorHandle(config) {
     const key = tilesetEditorState.key;
+    const getSegment = () => {
+      const anchor = _getTilesetEditorAnchor(key);
+      if (!anchor) return null;
+      const start = _offsetFromAnchor(anchor, config.axis, config.startMeters * config.direction);
+      const end = _offsetFromAnchor(anchor, config.axis, config.endMeters * config.direction);
+      return start && end ? [start, end] : null;
+    };
+    const getLabelPosition = () => {
+      const anchor = _getTilesetEditorAnchor(key);
+      return anchor ? _offsetFromAnchor(anchor, config.axis, config.labelMeters * config.direction) : null;
+    };
+    const getPointPosition = () => {
+      const segment = getSegment();
+      return segment?.[1] || null;
+    };
     const line = viewer.entities.add({
       polyline: {
-        positions: new Cesium.CallbackProperty(() => {
-          const anchor = _getTilesetEditorAnchor(key);
-          if (!anchor) return [];
-          const start = _offsetFromAnchor(anchor, config.axis, config.startMeters * config.direction);
-          const end = _offsetFromAnchor(anchor, config.axis, config.endMeters * config.direction);
-          return start && end ? [start, end] : [];
-        }, false),
-        width: config.width || 8,
+        positions: new Cesium.CallbackProperty(() => getSegment() || [], false),
+        width: config.width || 12,
         material: new Cesium.PolylineArrowMaterialProperty(config.color),
         depthFailMaterial: new Cesium.PolylineArrowMaterialProperty(config.color.withAlpha(0.6)),
       },
     });
-    line._scTilesetAdjust = config.patch;
+
+    const point = viewer.entities.add({
+      position: new Cesium.CallbackProperty(() => getPointPosition(), false),
+      point: {
+        pixelSize: config.pointSize || 20,
+        color: config.color.withAlpha(0.34),
+        outlineColor: Cesium.Color.WHITE.withAlpha(0.96),
+        outlineWidth: config.pointOutlineWidth || 3,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
 
     const label = viewer.entities.add({
-      position: new Cesium.CallbackProperty(() => {
-        const anchor = _getTilesetEditorAnchor(key);
-        return anchor ? _offsetFromAnchor(anchor, config.axis, config.labelMeters * config.direction) : null;
-      }, false),
+      position: new Cesium.CallbackProperty(() => getLabelPosition(), false),
       label: {
         text: config.label,
         font: "600 13px Inter, sans-serif",
@@ -408,22 +610,47 @@ window.AppViewer = (() => {
         pixelOffset: new Cesium.Cartesian2(0, config.axis === "up" ? 0 : -2),
       },
     });
-    label._scTilesetAdjust = config.patch;
 
-    tilesetEditorState.entities.push(line, label);
+    _registerTilesetEditorTarget({
+      id: `tileset-editor-target-${++tilesetEditorTargetSeq}`,
+      patch: config.patch,
+      entities: [line, point, label],
+      lineEntity: line,
+      pointEntity: point,
+      labelEntity: label,
+      baseLineWidth: config.width || 12,
+      basePointSize: config.pointSize || 20,
+      basePointOutlineWidth: config.pointOutlineWidth || 3,
+      baseLabelColor: config.color,
+      hitRadiusPx: config.hitRadiusPx || 26,
+      getSegment,
+      getPosition: getPointPosition,
+      getLabelPosition,
+    });
   }
 
   function _createTilesetEditorAction(config) {
     const key = tilesetEditorState.key;
-    const entity = viewer.entities.add({
-      position: new Cesium.CallbackProperty(() => {
-        const anchor = _getTilesetEditorAnchor(key);
-        if (!anchor) return null;
-        const primary = _offsetFromAnchor(anchor, config.axis, config.axisMeters);
-        if (!primary) return null;
-        if (!config.sideAxis) return primary;
-        return _offsetFromAnchor(primary, config.sideAxis, config.sideMeters);
-      }, false),
+    const getPosition = () => {
+      const anchor = _getTilesetEditorAnchor(key);
+      if (!anchor) return null;
+      const primary = _offsetFromAnchor(anchor, config.axis, config.axisMeters);
+      if (!primary) return null;
+      if (!config.sideAxis) return primary;
+      return _offsetFromAnchor(primary, config.sideAxis, config.sideMeters);
+    };
+    const point = viewer.entities.add({
+      position: new Cesium.CallbackProperty(() => getPosition(), false),
+      point: {
+        pixelSize: config.pointSize || 18,
+        color: config.color.withAlpha(0.34),
+        outlineColor: Cesium.Color.WHITE.withAlpha(0.96),
+        outlineWidth: config.pointOutlineWidth || 3,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+    const label = viewer.entities.add({
+      position: new Cesium.CallbackProperty(() => getPosition(), false),
       label: {
         text: config.label,
         font: "600 13px Inter, sans-serif",
@@ -435,10 +662,23 @@ window.AppViewer = (() => {
         backgroundColor: config.color.withAlpha(0.82),
         backgroundPadding: new Cesium.Cartesian2(8, 5),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        pixelOffset: new Cesium.Cartesian2(0, -22),
       },
     });
-    entity._scTilesetAdjust = config.patch;
-    tilesetEditorState.entities.push(entity);
+
+    _registerTilesetEditorTarget({
+      id: `tileset-editor-target-${++tilesetEditorTargetSeq}`,
+      patch: config.patch,
+      entities: [point, label],
+      pointEntity: point,
+      labelEntity: label,
+      basePointSize: config.pointSize || 18,
+      basePointOutlineWidth: config.pointOutlineWidth || 3,
+      baseLabelColor: config.color,
+      hitRadiusPx: config.hitRadiusPx || 28,
+      getPosition,
+      getLabelPosition: getPosition,
+    });
   }
 
   function startTilesetAdjustmentEditor(uuid, options = {}) {
@@ -537,19 +777,25 @@ window.AppViewer = (() => {
       if (!tilesetEditorState.repeatTimer) return;
       window.clearInterval(tilesetEditorState.repeatTimer);
       tilesetEditorState.repeatTimer = null;
+      _resumeTilesetEditorCameraControls();
     };
 
     tilesetEditorState.handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     tilesetEditorState.handler.setInputAction((click) => {
       clearRepeat();
-      const picked = viewer.scene.pick(click.position);
-      const payload = picked?.id?._scTilesetAdjust || null;
-      if (!payload) return;
-      _nudgeTilesetAdjustment(key, payload);
+      const target = _findTilesetEditorTarget(click.position);
+      if (!target?.patch) return;
+      _setTilesetEditorHover(target.id);
+      _pauseTilesetEditorCameraControls();
+      _nudgeTilesetAdjustment(key, target.patch);
       tilesetEditorState.repeatTimer = window.setInterval(() => {
-        _nudgeTilesetAdjustment(key, payload);
+        _nudgeTilesetAdjustment(key, target.patch);
       }, 140);
     }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+    tilesetEditorState.handler.setInputAction((movement) => {
+      const target = _findTilesetEditorTarget(movement.endPosition);
+      _setTilesetEditorHover(target?.id || null);
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
     tilesetEditorState.handler.setInputAction(() => {
       clearRepeat();
     }, Cesium.ScreenSpaceEventType.LEFT_UP);
@@ -591,7 +837,7 @@ window.AppViewer = (() => {
       }
       const chunkLength = view.getUint32(12, true);
       const chunkType = view.getUint32(16, true);
-      if (chunkType !== 0x4E4F534A) return null; // JSON
+      if (chunkType !== 0x4E4F534A) return null;
 
       const jsonBytes = new Uint8Array(bytes, 20, chunkLength);
       const payload = JSON.parse(new TextDecoder().decode(jsonBytes));
@@ -671,18 +917,12 @@ window.AppViewer = (() => {
     });
   }
 
-  /**
-   * Cesium.Terrain.fromWorldTerrain() async yüklenir; yüklenene kadar
-   * globe terrain provider'ı ellipsoid olarak kalabilir.
-   * Bu fonksiyon gerçek terrain provider hazır olana kadar bekler.
-   * Token yoksa veya timeout geçerse null döner.
-   */
   function _waitForRealTerrain(timeoutMs = 15_000) {
     if (!viewer) return Promise.resolve(null);
     const globe = viewer.scene?.globe;
     const current = globe?.terrainProvider;
     if (current && !(current instanceof Cesium.EllipsoidTerrainProvider)) {
-      return Promise.resolve(current); // zaten hazır
+      return Promise.resolve(current);
     }
 
     if (terrainHandle) {
@@ -701,7 +941,6 @@ window.AppViewer = (() => {
               terrainHandle?.errorEvent?.removeEventListener(onError);
               globe?.terrainProviderChanged?.removeEventListener(onProviderChanged);
             } catch (_) {
-              /* yoksay */
             }
             resolve(provider ?? null);
           };
@@ -737,7 +976,7 @@ window.AppViewer = (() => {
         if (settled) return;
         settled = true;
         globe.terrainProviderChanged.removeEventListener(onChanged);
-        resolve(null); // terrain hiç gelmedi (token yok vb.)
+        resolve(null);
       }, timeoutMs);
 
       function onChanged(newProvider) {
@@ -754,21 +993,10 @@ window.AppViewer = (() => {
     });
   }
 
-  /**
-   * ODM tilesetlerinde root.transform ile ECEF yerleşimi yapıldığında
-   * region[4] (minHeight) LOCAL koordinatlardadır (WGS84 değil).
-   * Bu durumda terrain örneği ile yanlış fark hesaplanıp model havaya kaldırılır.
-   *
-   * Kural: root.transform içinde büyük ECEF translation varsa (>1M m)
-   * tileset zaten doğru konumda; ek offset uygulamayız.
-   * Transform yoksa veya identity'ye yakınsa region heights WGS84'tür —
-   * ince offset hâlâ uygulanabilir.
-   */
   function _tilesetHasEcefTransform(descriptor) {
     const t = descriptor?.root?.transform;
     if (!Array.isArray(t) || t.length !== 16) return false;
-    // Sütun-major 4×4: translation = [t[12], t[13], t[14]]
-    return Math.hypot(t[12], t[13], t[14]) > 1_000_000; // >1000 km → ECEF konumu
+    return Math.hypot(t[12], t[13], t[14]) > 1_000_000;
   }
 
   function _tilesetNeedsTerrainPlacement(descriptor, pipeline = "drone") {
@@ -782,13 +1010,11 @@ window.AppViewer = (() => {
     if (!viewer || !tileset) return null;
     if (debugMeta?.terrainOffsetApplied) return debugMeta;
 
-    // root.transform ile ECEF'e yerleştirilmiş tileset → offset gereksiz ve zararlı
     if (_tilesetHasEcefTransform(descriptor)) {
       debugMeta.terrainOffsetSkipped = "ecef-transform";
       return debugMeta;
     }
 
-    // Terrain provider async yükleniyor — hazır değilse bekle
     const terrainProvider = await _waitForRealTerrain(15_000);
     if (!terrainProvider) return null;
 
@@ -822,7 +1048,6 @@ window.AppViewer = (() => {
     debugMeta.modelMinHeight = modelMinHeight;
     debugMeta.terrainOffsetMeters = offsetMeters;
 
-    // Offset yoksa veya çok büyükse (muhtemelen hatalı) uygulama
     if (!Number.isFinite(offsetMeters) || Math.abs(offsetMeters) < 0.5 || Math.abs(offsetMeters) > 80.0) {
       return debugMeta;
     }
@@ -849,11 +1074,10 @@ window.AppViewer = (() => {
       debugMeta.terrainOffsetAttempt = attempt;
       const result = await _applyTerrainHeightOffset(tileset, descriptor, debugMeta);
       if (result?.terrainOffsetApplied) return result;
-      // Yükseklik alındı ama offset aralık dışıydı — daha fazla retry'a gerek yok
       if (result?.terrainHeights?.length) return result;
       if (attempt < attempts) {
         viewer?.scene?.requestRender?.();
-        await _sleep(800 * attempt); // sampleTerrainMostDetailed için tile yüklenme süresi
+        await _sleep(800 * attempt);
       }
     }
     return debugMeta;
@@ -1109,7 +1333,6 @@ window.AppViewer = (() => {
         provider = await Cesium.TileMapServiceImageryProvider.fromUrl(tmsUrl);
       }
     } catch (_) {
-      /* yoksay */
     }
 
     if (!provider && previewUrl && Array.isArray(bbox) && bbox.length === 4) {
@@ -1360,12 +1583,11 @@ window.AppViewer = (() => {
 
   function setOrbitPaused(paused) {
     _orbitPaused = !!paused;
-    if (!paused && _orbitState) _orbitState.lastMs = null; // prevent heading jump on resume
+    if (!paused && _orbitState) _orbitState.lastMs = null;
   }
 
   function flyToHome(options = {}) {
     if (!viewer) return;
-    // 8 500 km yükseklik, pitch -60° → Earth nadir'den 30° ötede → globe görünür ve eğri belli
     viewer.camera.flyTo({
       destination: Cesium.Cartesian3.fromDegrees(35.0, 39.0, 8_500_000),
       orientation: {

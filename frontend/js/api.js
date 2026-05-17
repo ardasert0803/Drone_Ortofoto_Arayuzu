@@ -1,5 +1,3 @@
-/* Backend REST API'sine ince bir wrapper.
- * Tüm uçlar fastapi tarafında /api/* altında. */
 window.API = (() => {
   const base = "";
 

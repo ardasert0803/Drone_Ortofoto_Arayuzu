@@ -5,28 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230d5c63'/%3E%3Ctext x='32' y='41' font-size='28' text-anchor='middle' fill='white' font-family='Arial, sans-serif'%3ESC%3C/text%3E%3C/svg%3E" />
 
-  <!-- CesiumJS (CDN) -->
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.121/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.121/Build/Cesium/Cesium.js"></script>
-  <!-- Fabric.js — canvas anotasyon -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
 
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=20260517-2" />
 </head>
 <body>
-  <!-- ============== Cesium tam ekran arka plan ============== -->
   <main id="cesiumContainer"></main>
 
-  <!-- ============== Üstte yatay proje şeridi ============== -->
   <div class="top-strip">
-    <div class="mode-switch" aria-label="Calisma modu">
+    <div class="mode-switch" aria-label="Çalışma modu">
       <button id="btn-mode-drone" class="active" type="button">Drone</button>
     </div>
   </div>
 
-  <!-- ============== Sol kenar: brand + proje listesi ============== -->
   <aside id="sidebar-left">
-    <!-- Varsayılan içerik — şantiye modunda gizlenir -->
     <div id="sidebar-default-content">
       <div class="brand">
         <div class="logo">SC</div>
@@ -36,7 +30,6 @@
         </div>
       </div>
 
-      <!-- Proje listesi -->
       <header>
         <h2 id="project-heading">Drone Projeleri</h2>
         <button id="btn-new-project" class="primary">+ Yeni Drone Projesi</button>
@@ -46,7 +39,6 @@
       </ul>
     </div>
 
-    <!-- Şantiye modu içeriği — seçili proje şantiye olduğunda gösterilir -->
     <div id="sidebar-construction" hidden>
       <div class="constr-back-bar">
         <button id="btn-back-to-projects" class="back-button" type="button">← Projeler</button>
@@ -57,10 +49,13 @@
         <div id="constr-site-meta" class="constr-site-meta"></div>
       </div>
       <div id="constr-quick-stats" class="constr-quick-stats"></div>
+      <section id="constr-description-card" class="constr-description-card">
+        <span class="constr-description-label">Açıklama</span>
+        <p id="constr-description-text" class="constr-description-text">Açıklama girilmedi.</p>
+      </section>
     </div>
   </aside>
 
-  <!-- ============== Sağ kenar: katmanlar + araçlar + detay ============== -->
   <aside id="sidebar-right">
     <section id="panel-layers-drone" class="panel">
       <h3>Katmanlar</h3>
@@ -93,11 +88,10 @@
         <span>3D Indoor Model</span>
       </label>
       <div class="info-card info-card-muted">
-        Indoor modeller georefsiz yerel sahnede acilir. Globe ve OSM katmanlari bu modda gizlenir.
+        Indoor modeller georefsiz yerel sahnede açılır. Globe ve OSM katmanları bu modda gizlenir.
       </div>
     </section>
 
-    <!-- Şantiye moduna özel sadeleştirilmiş katman paneli -->
     <section id="panel-layers-construction" class="panel" hidden>
       <h3>Katmanlar</h3>
       <label class="toggle">
@@ -152,7 +146,6 @@
       </div>
     </section>
 
-    <!-- Saha notları — şantiye modunda gösterilir -->
     <section id="panel-quick-notes" class="panel" hidden>
       <h3>Saha Notları</h3>
       <button id="btn-add-note" type="button" class="note-add-btn"><span class="icon icon-pin"></span>Not Ekle</button>
@@ -190,7 +183,6 @@
       </div>
     </section>
 
-    <!-- Şantiye moduna özel saha özeti + aksiyon paneli -->
     <section id="panel-site-info" class="panel" hidden>
       <div class="site-info-hd">
         <h3>Saha Özeti</h3>
@@ -203,7 +195,7 @@
       <div class="site-secondary-actions">
         <button id="btn-constr-tileset-edit" type="button" class="site-sec-btn">
           <span class="icon icon-cube"></span>
-          <span>3D Yerlestir</span>
+          <span>3D Yerleştir</span>
         </button>
         <button id="btn-constr-refresh" type="button" class="site-sec-btn">
           <span class="icon icon-refresh"></span>
@@ -224,12 +216,11 @@
     <section id="panel-about" class="panel">
       <h3>Hakkında</h3>
       <div class="info-card" style="border-color: var(--glass-border); background: rgba(0,0,0,0.2);">
-        Bu arayuz drone ortofoto is akisini Cesium uzerinde yonetir.
+        Bu arayüz drone ortofoto iş akışını Cesium üzerinde yönetir.
       </div>
     </section>
   </aside>
 
-  <!-- ============== Yeni proje modali ============== -->
   <div id="modal-upload" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <header>
@@ -240,29 +231,29 @@
         <div id="project-type-gate" class="project-type-gate">
           <span class="project-type-kicker">Drone Projesi</span>
           <h4>Bu proje ne olacak?</h4>
-          <p>Ana formu acmadan once temel senaryoyu sec. Sonraki alanlar buna gore acilacak.</p>
+          <p>Ana formu açmadan önce temel senaryoyu seç. Sonraki alanlar buna göre açılacak.</p>
           <div class="project-type-choice-grid">
             <button type="button" class="project-type-choice" data-project-use-case="construction">
-              <strong>Santiye</strong>
-              <span>Insaat, saha takibi ve ilerleme izleme projeleri</span>
+              <strong>Şantiye</strong>
+              <span>İnşaat, saha takibi ve ilerleme izleme projeleri</span>
             </button>
             <button type="button" class="project-type-choice" data-project-use-case="museum">
-              <strong>Muze</strong>
-              <span>Koleksiyon, sergi ve muze odakli ortofoto projeleri</span>
+              <strong>Müze</strong>
+              <span>Koleksiyon, sergi ve müze odaklı ortofoto projeleri</span>
             </button>
           </div>
         </div>
 
         <div id="project-form-content" class="project-form-content" hidden>
-          <div class="project-type-switch" aria-label="Secili proje tipi">
-            <span id="selected-project-type-label" class="selected-project-type-label">Santiye</span>
+          <div class="project-type-switch" aria-label="Seçili proje tipi">
+            <span id="selected-project-type-label" class="selected-project-type-label">Şantiye</span>
             <div id="project-type-inline-switch" class="project-type-inline-switch" hidden>
-              <button type="button" data-project-use-case="construction">Santiye</button>
-              <button type="button" data-project-use-case="museum">Muze</button>
+              <button type="button" data-project-use-case="construction">Şantiye</button>
+              <button type="button" data-project-use-case="museum">Müze</button>
             </div>
           </div>
           <div id="project-edit-note" class="info-card info-card-muted" hidden>
-            Bu modda sadece proje bilgileri guncellenir. Mevcut ortofoto ve ciktilar korunur, yeni fotograf yuklenmez.
+            Bu modda sadece proje bilgileri güncellenir. Mevcut ortofoto ve çıktılar korunur, yeni fotoğraf yüklenmez.
           </div>
 
           <div class="modal-grid">
@@ -304,27 +295,27 @@
               <div id="museum-fields" class="museum-form-fields field-span-full" hidden>
                 <label>
                   Müze adı
-                  <input type="text" name="museum_name" placeholder="örn: Anadolu Medeniyetleri Muzesi" disabled />
+                  <input type="text" name="museum_name" placeholder="örn: Anadolu Medeniyetleri Müzesi" disabled />
                 </label>
                 <label>
                   Tarihsel dönem
-                  <input type="text" name="historical_period" placeholder="örn: Hitit, Roma, Osmanli" disabled />
+                  <input type="text" name="historical_period" placeholder="örn: Hitit, Roma, Osmanlı" disabled />
                 </label>
                 <label class="field-span-full">
                   Tarihçe / açıklama
-                  <textarea name="museum_summary" rows="4" placeholder="Muze yapisinin tarihcesi, koleksiyon kapsami veya ozel baglam" disabled></textarea>
+                  <textarea name="museum_summary" rows="4" placeholder="Müze yapısının tarihçesi, koleksiyon kapsamı veya özel bağlam" disabled></textarea>
                 </label>
                 <label class="field-span-full">
                   Öne çıkan eserler
-                  <textarea name="featured_artifacts" rows="4" placeholder="Koleksiyondaki onemli eserleri veya odak nesneleri yaz" disabled></textarea>
+                  <textarea name="featured_artifacts" rows="4" placeholder="Koleksiyondaki önemli eserleri veya odak nesneleri yaz" disabled></textarea>
                 </label>
                 <label class="field-span-full">
                   Ziyaret notu
-                  <textarea name="visitor_notes" rows="3" placeholder="Ziyaret akisina dair notlar, dikkat edilmesi gereken alanlar veya sergi kurgusu" disabled></textarea>
+                  <textarea name="visitor_notes" rows="3" placeholder="Ziyaret akışına dair notlar, dikkat edilmesi gereken alanlar veya sergi kurgusu" disabled></textarea>
                 </label>
                 <label>
                   Müze adresi
-                  <input type="text" name="museum_address" placeholder="örn: Altindag / Ankara" disabled />
+                  <input type="text" name="museum_address" placeholder="örn: Altındağ / Ankara" disabled />
                 </label>
                 <label>
                   Ziyaret saatleri
@@ -332,15 +323,15 @@
                 </label>
                 <label>
                   Bilet / erişim
-                  <input type="text" name="ticket_access" placeholder="örn: MuzeKart gecerli, ana giris rampali" disabled />
+                  <input type="text" name="ticket_access" placeholder="örn: MüzeKart geçerli, ana giriş rampalı" disabled />
                 </label>
                 <label>
                   Koleksiyon teması
-                  <input type="text" name="collection_theme" placeholder="örn: Anadolu arkeolojisi ve tas koleksiyonlari" disabled />
+                  <input type="text" name="collection_theme" placeholder="örn: Anadolu arkeolojisi ve taş koleksiyonları" disabled />
                 </label>
                 <label>
                   Sorumlu kişi
-                  <input type="text" name="curator_contact" placeholder="örn: Koleksiyon sorumlusu / iletisim notu" disabled />
+                  <input type="text" name="curator_contact" placeholder="örn: Koleksiyon sorumlusu / iletişim notu" disabled />
                 </label>
               </div>
             </section>
@@ -352,24 +343,19 @@
                 <div class="upload-dropzone">
                   <span class="upload-dropzone-copy">
                     <span class="upload-kicker">Veri Seti</span>
-                    <strong>Dosya veya klasor sec</strong>
-                    <span class="upload-subtext">JPG, JPEG, PNG veya TIFF formatinda fotogrametri karelerini tek tek ya da klasor olarak ekle</span>
+                    <strong>Dosya veya klasör seç</strong>
+                    <span class="upload-subtext">JPG, JPEG, PNG veya TIFF formatında fotogrametri karelerini tek tek ya da klasör olarak ekle</span>
                   </span>
                   <div class="upload-actions">
-                    <label class="upload-picker-button" for="project-images">Dosya sec</label>
+                    <label class="upload-picker-button" for="project-images">Dosya seç</label>
                     <input id="project-images" class="upload-picker" type="file" name="images" multiple accept="image/*" />
-                    <label class="upload-picker-button secondary" for="project-image-folder">Klasor sec</label>
+                    <label class="upload-picker-button secondary" for="project-image-folder">Klasör seç</label>
                     <input id="project-image-folder" class="upload-picker" type="file" multiple accept="image/*" webkitdirectory directory />
                   </div>
                 </div>
-                <div id="upload-file-summary" class="upload-file-summary">Henuz dosya veya klasor secilmedi</div>
-                <div class="upload-compat">Not: Klasor secimi daha cok Chromium tabanli tarayicilarda desteklenir.</div>
+                <div id="upload-file-summary" class="upload-file-summary">Henüz dosya veya klasör seçilmedi</div>
+                <div class="upload-compat">Not: Klasör seçimi daha çok Chromium tabanlı tarayıcılarda desteklenir.</div>
               </div>
-              <p class="hint">
-                Fotograflar NodeODM container'ina kaliteli ortofoto icin full pipeline
-                olarak gonderilecek. GPU varsa dense/OpenMVS asamalarinda kullanilir.
-                Sonuc tamamlandiginda ortofoto Cesium uzerinde acilir.
-              </p>
             </section>
           </div>
           <div id="upload-status" class="status"></div>
@@ -394,23 +380,23 @@
             <h4>Indoor Proje Bilgileri</h4>
             <label>
               Proje adı
-              <input type="text" name="name" placeholder="orn: ofis_kat2_2026_04" required />
+              <input type="text" name="name" placeholder="örn: ofis_kat2_2026_04" required />
             </label>
             <label>
               Bina adı
-              <input type="text" name="building_name" placeholder="orn: Merkez Ofis" />
+              <input type="text" name="building_name" placeholder="örn: Merkez Ofis" />
             </label>
             <label>
               Kat etiketi
-              <input type="text" name="floor_label" placeholder="orn: Kat 2" />
+              <input type="text" name="floor_label" placeholder="örn: Kat 2" />
             </label>
             <label>
               Alan / mekan etiketi
-              <input type="text" name="space_label" placeholder="orn: Toplanti odasi A" />
+              <input type="text" name="space_label" placeholder="örn: Toplantı odası A" />
             </label>
             <label>
               Konum
-              <input type="text" name="location" placeholder="orn: Istanbul / Sisli" />
+              <input type="text" name="location" placeholder="örn: İstanbul / Şişli" />
             </label>
             <label>
               Çekim tarihi
@@ -418,7 +404,7 @@
             </label>
             <label class="field-span-full">
               Açıklama
-              <textarea name="description" rows="5" placeholder="Cekim notlari, alan tarifi veya kalite notlari"></textarea>
+              <textarea name="description" rows="5" placeholder="Çekim notları, alan tarifi veya kalite notları"></textarea>
             </label>
           </section>
 
@@ -429,34 +415,33 @@
               <div class="upload-dropzone">
                 <span class="upload-dropzone-copy">
                   <span class="upload-kicker">Indoor Capture</span>
-                  <strong>Dosya veya klasor sec</strong>
-                  <span class="upload-subtext">Telefonla cekilmis, yuksek ortusmeli JPG veya PNG karelerini toplu olarak ekle</span>
+                  <strong>Dosya veya klasör seç</strong>
+                  <span class="upload-subtext">Telefonla çekilmiş, yüksek örtüşmeli JPG veya PNG karelerini toplu olarak ekle</span>
                 </span>
                 <div class="upload-actions">
-                  <label class="upload-picker-button" for="indoor-images">Dosya sec</label>
+                  <label class="upload-picker-button" for="indoor-images">Dosya seç</label>
                   <input id="indoor-images" class="upload-picker" type="file" name="images" multiple accept="image/*" />
-                  <label class="upload-picker-button secondary" for="indoor-image-folder">Klasor sec</label>
+                  <label class="upload-picker-button secondary" for="indoor-image-folder">Klasör seç</label>
                   <input id="indoor-image-folder" class="upload-picker" type="file" multiple accept="image/*" webkitdirectory directory />
                 </div>
               </div>
-              <div id="indoor-upload-file-summary" class="upload-file-summary">Henuz dosya veya klasor secilmedi</div>
-              <div class="upload-compat">Oneri: ayni mekani farkli acilardan, yuksek ortusmeyle ve hareket bulanigi olmadan cek.</div>
+              <div id="indoor-upload-file-summary" class="upload-file-summary">Henüz dosya veya klasör seçilmedi</div>
+              <div class="upload-compat">Öneri: aynı mekanı farklı açılardan, yüksek örtüşmeyle ve hareket bulanıklığı olmadan çek.</div>
             </div>
             <p class="hint">
-              Indoor reconstruction ayri Docker hattinda calisir. Ilk surum telefon foto seti icindir; video ve 360 pano desteklenmez.
+              Indoor reconstruction ayrı Docker hattında çalışır. İlk sürüm telefon foto seti içindir; video ve 360 pano desteklenmez.
             </p>
           </section>
         </div>
         <div id="indoor-upload-status" class="status"></div>
         <footer>
           <button type="button" data-close-modal>İptal</button>
-          <button type="submit" class="primary">Indoor Gorevi Baslat</button>
+          <button type="submit" class="primary">Indoor Görevi Başlat</button>
         </footer>
       </form>
     </div>
   </div>
 
-  <!-- Not detay popup'u — haritada veya listede nota tıklanınca gösterilir -->
   <div id="note-detail-popup" class="note-popup hidden" role="dialog" aria-label="Not detayı">
     <div class="note-popup-inner">
       <div class="note-popup-header">
@@ -485,10 +470,8 @@
     </div>
   </div>
 
-  <!-- ============== Sunum Modu Overlay ============== -->
   <div id="modal-presentation" class="pres-overlay hidden" role="dialog" aria-modal="true" aria-label="Sunum Modu">
 
-    <!-- Top HUD bar — kontroller -->
     <div class="pres-topbar">
       <div class="pres-topbar-left">
         <span class="icon icon-presentation pres-topbar-icon"></span>
@@ -510,7 +493,6 @@
       <div id="pres-card-wrap" class="pres-card-wrap"></div>
     </div>
 
-    <!-- Alt bilgi alanı — navigasyon -->
     <div class="pres-card-area">
       <div class="pres-footer">
         <button id="btn-pres-prev" class="pres-nav-btn" type="button" aria-label="Önceki slayt">‹</button>
@@ -519,18 +501,17 @@
       </div>
     </div>
 
-    <!-- Progress strip -->
     <div class="pres-progress-track">
       <div id="pres-progress-fill" class="pres-progress-fill"></div>
     </div>
   </div>
 
-  <div id="modal-presentation-settings" class="modal hidden" role="dialog" aria-modal="true" aria-label="Sunum Modu Ayarlari">
+  <div id="modal-presentation-settings" class="modal hidden" role="dialog" aria-modal="true" aria-label="Sunum Modu Ayarları">
     <div class="modal-card pres-settings-modal-card">
       <header>
         <div>
-          <h3>Sunum Modu Ayarlari</h3>
-          <p class="pres-settings-modal-subtitle" id="pres-settings-project-name">Muze Projesi</p>
+          <h3>Sunum Modu Ayarları</h3>
+          <p class="pres-settings-modal-subtitle" id="pres-settings-project-name">Müze Projesi</p>
         </div>
         <button class="close" type="button" data-close-presentation-settings>×</button>
       </header>
@@ -546,15 +527,15 @@
               </select>
             </label>
             <label>
-              Baslangic acisi
+              Başlangıç açısı
               <input id="pres-orbit-heading" type="number" min="-360" max="360" step="0.1" />
             </label>
             <label>
-              Kamera egimi
+              Kamera eğimi
               <input id="pres-orbit-pitch" type="number" min="-89" max="89" step="0.1" />
             </label>
             <label>
-              Kamera yakinligi / uzakligi
+              Kamera yakınlığı / uzaklığı
               <input id="pres-orbit-range" type="number" min="0.1" max="20" step="0.1" />
             </label>
             <label>
@@ -567,10 +548,10 @@
             </label>
             <label class="pres-settings-check pres-settings-check-compact">
               <input id="pres-auto-scroll-enabled" type="checkbox" />
-              <span>Kart icinde otomatik scroll</span>
+              <span>Kart içinde otomatik scroll</span>
             </label>
             <label>
-              Scroll hizi
+              Scroll hızı
               <input id="pres-auto-scroll-speed" type="number" min="1" max="400" step="1" />
             </label>
             <label>
@@ -578,7 +559,7 @@
               <input id="pres-auto-scroll-pause" type="number" min="0" step="100" />
             </label>
             <div class="pres-settings-camera-note">
-              Kamera bu acilarla ortofoto/model merkezine bakarak orbit baslatir. Otomatik scroll yalnizca tasan kartlarda calisir.
+              Kamera bu açılarla ortofoto/model merkezine bakarak orbit başlatır. Otomatik scroll yalnızca taşan kartlarda çalışır.
             </div>
           </section>
           <section class="form-section">
@@ -591,8 +572,8 @@
         </aside>
         <section class="pres-settings-main">
           <div class="pres-settings-preview-head">
-            <h4>Canli Preview</h4>
-            <span>Kartlari surukleyerek konumlandirabilir, secili karti sag panelden ince ayarlayabilirsin.</span>
+            <h4>Canlı Preview</h4>
+            <span>Kartları sürükleyerek konumlandırabilir, seçili kartı sağ panelden ince ayarlayabilirsin.</span>
           </div>
           <div id="pres-settings-preview" class="pres-settings-preview"></div>
         </section>
@@ -605,21 +586,18 @@
       </div>
       <div id="pres-settings-status" class="status"></div>
       <footer>
-        <button id="btn-pres-settings-reset" type="button">Varsayilana Don</button>
-        <button type="button" data-close-presentation-settings>Iptal</button>
+        <button id="btn-pres-settings-reset" type="button">Varsayılana Dön</button>
+        <button type="button" data-close-presentation-settings>İptal</button>
         <button id="btn-pres-settings-save" type="button" class="primary">Kaydet</button>
       </footer>
     </div>
   </div>
 
-  <!-- ============== Ekran görüntüsü anotasyon modalı ============== -->
   <div id="modal-annotate" class="annotate-overlay hidden" role="dialog" aria-modal="true" aria-label="Ekran görüntüsü notlandırma">
     <div class="annotate-ui">
 
-      <!-- Toolbar -->
       <div class="annotate-toolbar" role="toolbar">
 
-        <!-- Araçlar -->
         <div class="annotate-tool-group">
           <button class="annotate-tool-btn active" data-tool="select" title="Seçim (V)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-7 1-4 7L5 3z"/></svg>
@@ -643,7 +621,6 @@
 
         <div class="annotate-toolbar-sep"></div>
 
-        <!-- Renk + kalınlık -->
         <div class="annotate-tool-group annotate-style-group">
           <div class="annotate-color-presets">
             <button class="annotate-preset-color" data-color="#f85149" style="background:#f85149" title="Kırmızı"></button>
@@ -665,7 +642,6 @@
 
         <div class="annotate-toolbar-sep"></div>
 
-        <!-- Geri al / sil -->
         <div class="annotate-tool-group">
           <button id="btn-annotate-undo" class="annotate-tool-btn" title="Geri al (Ctrl+Z)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
@@ -678,10 +654,8 @@
           </button>
         </div>
 
-        <!-- spacer -->
         <span class="annotate-toolbar-spacer"></span>
 
-        <!-- İndir + kapat -->
         <div class="annotate-tool-group">
           <button id="btn-annotate-download" class="annotate-tool-btn annotate-btn-primary" type="button">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -692,7 +666,6 @@
 
       </div>
 
-      <!-- Canvas alanı -->
       <div class="annotate-canvas-area" id="annotate-canvas-area">
         <canvas id="annotate-canvas"></canvas>
       </div>
@@ -702,28 +675,27 @@
 
   <div id="tileset-edit-hud" class="tileset-edit-hud" hidden>
     <div class="tileset-edit-copy">
-      <strong id="tileset-edit-title">3D Yerlestirme Modu</strong>
-      <span id="tileset-edit-subtitle">Oklar ve yaw etiketleri ile modeli duzenle.</span>
+      <strong id="tileset-edit-title">3D Yerleştirme Modu</strong>
+      <span id="tileset-edit-subtitle">Oklar ve yaw etiketleri ile modeli düzenle.</span>
     </div>
     <div class="tileset-edit-actions">
-      <button id="btn-tileset-edit-reset" type="button">Sifirla</button>
-      <button id="btn-tileset-edit-cancel" type="button">Iptal</button>
+      <button id="btn-tileset-edit-reset" type="button">Sıfırla</button>
+      <button id="btn-tileset-edit-cancel" type="button">İptal</button>
       <button id="btn-tileset-edit-save" type="button" class="primary">Kaydet</button>
     </div>
   </div>
 
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- ============== Scriptler ============== -->
-  <script src="/js/api.js"></script>
-  <script src="/js/annotate.js"></script>
-  <script src="/js/presentation.js"></script>
-  <script src="/js/presentation-settings.js"></script>
-  <script src="/js/viewer.js"></script>
-  <script src="/js/measurement.js"></script>
-  <script src="/js/notes.js"></script>
-  <script src="/js/toast.js"></script>
-  <script src="/js/upload.js"></script>
-  <script src="/js/app.js"></script>
+  <script src="/js/api.js?v=20260517-1"></script>
+  <script src="/js/annotate.js?v=20260517-1"></script>
+  <script src="/js/presentation.js?v=20260517-1"></script>
+  <script src="/js/presentation-settings.js?v=20260517-1"></script>
+  <script src="/js/viewer.js?v=20260517-1"></script>
+  <script src="/js/measurement.js?v=20260517-3"></script>
+  <script src="/js/notes.js?v=20260517-2"></script>
+  <script src="/js/toast.js?v=20260517-1"></script>
+  <script src="/js/upload.js?v=20260517-1"></script>
+  <script src="/js/app.js?v=20260517-4"></script>
 </body>
 </html>

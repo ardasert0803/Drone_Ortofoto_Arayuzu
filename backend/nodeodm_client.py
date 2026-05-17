@@ -1,14 +1,3 @@
-"""NodeODM REST API istemcisi.
-
-NodeODM kendi REST API'sini port 3000'de açar. Belgeler:
-https://github.com/OpenDroneMap/NodeODM/blob/master/docs/index.adoc
-
-Buradaki wrapper sadece bizim arayüzün ihtiyaç duyduğu uçları kapsar:
-- task oluşturma + foto yükleme + commit
-- task durumu sorgulama
-- task listesi
-- task çıktılarını indirme (orthophoto, point cloud, 3d tiles vb.)
-"""
 from __future__ import annotations
 
 import asyncio
@@ -20,19 +9,14 @@ import httpx
 
 from config import settings
 
-
 class NodeODMError(RuntimeError):
-    """NodeODM tarafında oluşan hatalar için."""
-
+    pass
 
 class NodeODMClient:
     def __init__(self, base_url: str | None = None, timeout: float = 300.0):
         self.base_url = base_url or settings.NODEODM_URL
         self.timeout = timeout
 
-    # ------------------------------------------------------------------
-    # Yardımcılar
-    # ------------------------------------------------------------------
     async def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout)
 
@@ -46,7 +30,6 @@ class NodeODMClient:
             return {"raw": resp.text}
 
     async def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
-        """Tüm httpx hatalarını NodeODMError'a sararak istek yapar."""
         try:
             async with await self._client() as client:
                 return await client.request(method, url, **kwargs)
@@ -55,19 +38,13 @@ class NodeODMClient:
                 f"NodeODM bağlantı hatası ({self.base_url}): {exc.__class__.__name__}: {exc}"
             ) from exc
 
-    # ------------------------------------------------------------------
-    # NodeODM uçları
-    # ------------------------------------------------------------------
     async def info(self) -> dict[str, Any]:
-        """NodeODM'in çalışıp çalışmadığını ve sürümünü döner."""
         resp = await self._request("GET", "/info")
         return self._check(resp)
 
     async def list_tasks(self) -> list[str]:
-        """Mevcut task UUID'lerini döner."""
         resp = await self._request("GET", "/task/list")
         data = self._check(resp)
-        # /task/list bir liste döner: [{"uuid": "..."}, ...]
         if isinstance(data, list):
             return [t.get("uuid") for t in data if t.get("uuid")]
         return []
@@ -82,12 +59,6 @@ class NodeODMClient:
         name: str | None = None,
         options: list[dict[str, Any]] | None = None,
     ) -> str:
-        """Yeni bir ODM task'ı oluşturur ve fotoğrafları yükler.
-
-        files: [(filename, bytes), ...]
-        Geri dönüş: task UUID
-        """
-        # 1) /task/new/init  -> task uuid al
         init_payload: dict[str, Any] = {}
         if name:
             init_payload["name"] = name
@@ -101,7 +72,6 @@ class NodeODMClient:
         if not uuid:
             raise NodeODMError(f"NodeODM init dönüşünde uuid yok: {data}")
 
-        # 2) /task/new/upload/{uuid}  -> her foto için
         for fname, content in files:
             mime_type = mimetypes.guess_type(fname)[0] or "application/octet-stream"
             if isinstance(content, Path):
@@ -117,7 +87,6 @@ class NodeODMClient:
                 )
             self._check(up)
 
-        # 3) /task/new/commit/{uuid}  -> işleme başla
         commit = await self._request("POST", f"/task/new/commit/{uuid}")
         self._check(commit)
 
@@ -130,14 +99,6 @@ class NodeODMClient:
         return self._check(resp)
 
     async def download_asset(self, uuid: str, asset: str, dest: Path) -> Path:
-        """Bir task çıktısını indirir.
-
-        asset örnekleri:
-            "all.zip"             -> tüm çıktılar
-            "orthophoto.tif"      -> ortofoto GeoTIFF
-            "georeferenced_model.laz" -> nokta bulutu
-            "textured_model.zip"  -> dokulu mesh
-        """
         url = f"/task/{uuid}/download/{asset}"
         dest.parent.mkdir(parents=True, exist_ok=True)
         async with await self._client() as client:
@@ -152,20 +113,14 @@ class NodeODMClient:
                         fh.write(chunk)
         return dest
 
-
-# Bütün uygulama tek bir client'ı paylaşır
 client = NodeODMClient()
 
-
-
 async def _selftest() -> None:
-    """Komut satırından çalıştırınca NodeODM'e ping atar."""
     try:
         info = await client.info()
         print("NodeODM ulaşılabilir:", info)
     except Exception as exc:
         print("NodeODM'e ulaşılamadı:", exc)
-
 
 if __name__ == "__main__":
     asyncio.run(_selftest())

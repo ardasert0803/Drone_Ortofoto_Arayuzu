@@ -1,19 +1,12 @@
-/* Şantiye harita notları — localStorage tabanlı, backend gerektirmez.
- * Her not: BillboardGraphics (SVG pin) + gizlenebilir LabelGraphics.
- * pickPosition sonucu HeightReference.NONE ile olduğu gibi kullanılır
- * — böylece not 3D model yüzeyinde veya ortofoto üzerinde durur.
- */
 window.AppNotes = (() => {
   let viewer = null;
   let currentUuid = null;
   let notes = [];
-  let noteEntities = {};         // noteId → { billboard, label }
-  let clickHandler = null;       // geçici konum seçici handler
-  let entityClickHandler = null; // kalıcı entity tıklama handler
-  let pendingPos = null;         // { cartesian, lon, lat, height }
+  let noteEntities = {};
+  let clickHandler = null;
+  let entityClickHandler = null;
+  let pendingPos = null;
   let _activePopupNoteId = null;
-
-  /* ---------- SVG pin data URI'leri (category → data URI) ---------- */
 
   const CAT_COLORS = {
     not:      "#4f9eff",
@@ -64,11 +57,7 @@ window.AppNotes = (() => {
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   }
 
-  /* ---------- public ---------- */
-
   function init(_viewer) { viewer = _viewer; }
-
-  /* ---------- kategori picker ---------- */
 
   function _hexToRgb(hex) {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -105,7 +94,6 @@ window.AppNotes = (() => {
       if (e.key === "Escape") cancelPick();
     });
 
-    // Kategori picker
     _setActiveCat("not");
     document.querySelectorAll("#note-category-picker .note-cat-btn").forEach(btn => {
       btn.addEventListener("click", () => _setActiveCat(btn.dataset.cat));
@@ -116,10 +104,9 @@ window.AppNotes = (() => {
       if (_activePopupNoteId) _deleteNote(_activePopupNoteId);
     });
 
-    // Harita üzerinde entity tıklama — kalıcı handler
     entityClickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     entityClickHandler.setInputAction((click) => {
-      if (clickHandler) return; // Konum seçme modundayken entity tıklamalarını atla
+      if (clickHandler) return;
       const picked = viewer.scene.pick(click.position);
       if (Cesium.defined(picked) && picked.id && picked.id._scNoteId) {
         _openNotePopup(picked.id._scNoteId);
@@ -145,8 +132,6 @@ window.AppNotes = (() => {
     notes = [];
     _renderList();
   }
-
-  /* ---------- pick flow ---------- */
 
   function startPickLocation() {
     if (clickHandler) { clickHandler.destroy(); clickHandler = null; }
@@ -224,8 +209,6 @@ window.AppNotes = (() => {
     window.AppToast?.show("Not kaydedildi.", { tone: "success", duration: 1800 });
   }
 
-  /* ---------- entity rendering ---------- */
-
   function _addEntity(note) {
     const pos = note.cartesian
       ? new Cesium.Cartesian3(note.cartesian.x, note.cartesian.y, note.cartesian.z)
@@ -271,14 +254,12 @@ window.AppNotes = (() => {
   }
 
   function _setPinActive(noteId) {
-    // Önce tüm pinleri sıfırla
     for (const [id, ents] of Object.entries(noteEntities)) {
       if (ents.label) ents.label.label.show = false;
       if (ents.billboard) ents.billboard.billboard.image = _makePinDataUri(
         notes.find(n => n.id === id)?.category || "not"
       );
     }
-    // Hedef pini vurgula
     const ents = noteEntities[noteId];
     const note = notes.find(n => n.id === noteId);
     if (!ents || !note) return;
@@ -301,8 +282,6 @@ window.AppNotes = (() => {
     }
     noteEntities = {};
   }
-
-  /* ---------- popup ---------- */
 
   function _openNotePopup(noteId) {
     const note = notes.find(n => n.id === noteId);
@@ -338,8 +317,6 @@ window.AppNotes = (() => {
     const popup = document.getElementById("note-detail-popup");
     if (popup) popup.classList.add("hidden");
   }
-
-  /* ---------- list rendering ---------- */
 
   function _renderList() {
     const list = document.getElementById("notes-list");
@@ -388,8 +365,6 @@ window.AppNotes = (() => {
     _renderList();
     window.AppToast?.show("Not silindi.", { tone: "info", duration: 1500 });
   }
-
-  /* ---------- persistence ---------- */
 
   function _load(uuid) {
     try { return JSON.parse(localStorage.getItem(`sc_notes_${uuid}`) || "[]"); }

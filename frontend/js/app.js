@@ -1,4 +1,3 @@
-/* Ana uygulama orkestrasyonu. */
 (async () => {
   const useCaseLabels = {
     construction: "Santiye",
@@ -26,7 +25,7 @@
     fetchingDroneOutputs: new Set(),
     tilesetEditing: null,
   };
-  const CESIUM_ION_TOKEN = "";
+  const CESIUM_ION_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkZDlkOTAxNC01MzM4LTQzZGYtOGFiZS05M2ViOWEyNzU0YmQiLCJpZCI6NDI0Mzk5LCJpYXQiOjE3NzczMTIzNDl9.7tYIGyRQxtKe5KXihRQNq2R1UEi-phQO46uiAnmCR4I";
 
   const dom = {
     projectList: document.getElementById("task-list"),
@@ -41,13 +40,13 @@
     measurementTitle: document.getElementById("measurement-title"),
 
     droneTilesToggle: document.getElementById("layer-3dtiles"),
-    // Şantiye modu
     sidebarDefaultContent: document.getElementById("sidebar-default-content"),
     sidebarConstruction: document.getElementById("sidebar-construction"),
     sidebarProjectBadge: document.getElementById("sidebar-project-badge"),
     constrSiteName: document.getElementById("constr-site-name"),
     constrSiteMeta: document.getElementById("constr-site-meta"),
     constrQuickStats: document.getElementById("constr-quick-stats"),
+    constrDescriptionText: document.getElementById("constr-description-text"),
     constructionLayerPanel: document.getElementById("panel-layers-construction"),
     siteInfoPanel: document.getElementById("panel-site-info"),
     siteInfoContent: document.getElementById("site-info-content"),
@@ -274,7 +273,6 @@
   }
 
   function renderConstructionDetail(project) {
-    // Şantiye modunda task-detail kullanılmıyor; bilgiler panel-site-info'ya gidecek.
     dom.projectDetail.innerHTML = "";
   }
 
@@ -471,6 +469,10 @@
         </div>
       </div>
     `).join("");
+
+    if (dom.constrDescriptionText) {
+      dom.constrDescriptionText.textContent = (project.description || "").trim() || "Aciklama girilmedi.";
+    }
   }
 
   function showProjectFocusSidebar(project, kind = "construction") {
@@ -508,7 +510,6 @@
 
     AppNotes.setProject(project.uuid);
 
-    // Katman senkronizasyonu: mevcut drone panel durumunu kopyala
     const orthoCheck = document.getElementById("layer-orthophoto");
     const tilesCheck = document.getElementById("layer-3dtiles");
     const opacitySlider = document.getElementById("opacity-orthophoto");
@@ -547,7 +548,6 @@
   }
 
   function renderSiteInfoPanel(project) {
-    // Status pill
     const statusPill = document.getElementById("site-status-pill");
     if (statusPill) {
       const toneMap = { COMPLETED: "ok", RUNNING: "warn", FAILED: "danger", QUEUED: "info" };
@@ -556,7 +556,6 @@
       statusPill.className = `site-status-pill ${toneMap[project.status_text] || ""}`;
     }
 
-    // Mini kartlar + açıklama
     const cards = [
       project.location     ? _siteInfoCard("Konum", project.location, "icon-pin") : "",
       project.capture_date ? _siteInfoCard("Çekim", project.capture_date, "icon-calendar") : "",
@@ -716,7 +715,6 @@
       await AppViewer.loadOrthophoto(orthophoto, uuid, {forceReload: true});
       loaded = true;
     } catch {
-      /* yoksay */
     }
     try {
       const tileset = await API.tilesetUrl(uuid);
@@ -893,7 +891,6 @@
     AppViewer.flyToHome({ duration: 1.8 });
   });
 
-  // Şantiye katman paneli event listenerları — drone panel ile senkron
   document.getElementById("layer-ortho-constr").addEventListener("change", (e) => {
     document.getElementById("layer-orthophoto").checked = e.target.checked;
     AppViewer.setOrthoVisibility(e.target.checked);

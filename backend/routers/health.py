@@ -1,4 +1,3 @@
-"""Sağlık bilgisi uçları."""
 from fastapi import APIRouter
 
 from config import settings
@@ -6,10 +5,8 @@ from nodeodm_client import NodeODMError, client as odm
 
 router = APIRouter(prefix="/api", tags=["health"])
 
-
 @router.get("/health")
 async def health() -> dict:
-    """Web + NodeODM sağlık kontrolü."""
     web_ok = True
     nodeodm_ok = False
     nodeodm_info = None
@@ -18,7 +15,7 @@ async def health() -> dict:
         nodeodm_ok = True
     except NodeODMError as exc:
         nodeodm_info = {"error": str(exc)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         nodeodm_info = {"error": str(exc)}
 
     return {

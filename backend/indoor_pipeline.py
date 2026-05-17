@@ -1,4 +1,3 @@
-"""Indoor photogrammetry task management and runner dispatch."""
 from __future__ import annotations
 
 import json
@@ -42,34 +41,26 @@ _DEFAULT_STAGE_ORDER = [
     STAGE_DONE,
 ]
 
-
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
-
 
 def _state_path(uuid: str) -> Path:
     return settings.INDOOR_WORKSPACE_DIR / uuid / "state.json"
 
-
 def _manifest_path(uuid: str) -> Path:
     return settings.INDOOR_WORKSPACE_DIR / uuid / "manifest.json"
-
 
 def _upload_dir(uuid: str) -> Path:
     return settings.INDOOR_UPLOAD_DIR / uuid / "images"
 
-
 def _workspace_dir(uuid: str) -> Path:
     return settings.INDOOR_WORKSPACE_DIR / uuid
-
 
 def _output_dir(uuid: str) -> Path:
     return settings.INDOOR_OUTPUT_DIR / uuid
 
-
 def _log_path(uuid: str) -> Path:
     return settings.INDOOR_LOG_DIR / f"{uuid}.log"
-
 
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
@@ -80,14 +71,12 @@ def _read_json(path: Path) -> dict[str, Any]:
         return {}
     return data if isinstance(data, dict) else {}
 
-
 def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(data, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-
 
 def _merge_task(uuid: str) -> dict[str, Any]:
     manifest = _read_json(_manifest_path(uuid))
@@ -107,7 +96,6 @@ def _merge_task(uuid: str) -> dict[str, Any]:
     merged["status_text"] = STATUS_TEXT.get(status, "UNKNOWN")
     return merged
 
-
 def _task_uuids() -> list[str]:
     if not settings.INDOOR_WORKSPACE_DIR.exists():
         return []
@@ -118,20 +106,17 @@ def _task_uuids() -> list[str]:
         }
     )
 
-
 def _sort_key(task: dict[str, Any]) -> tuple[float, str]:
     raw = task.get("date_created")
     if isinstance(raw, (int, float)):
         return (float(raw), task["uuid"])
     return (0.0, task["uuid"])
 
-
 def _safe_text(value: str | None) -> str | None:
     if value is None:
         return None
     value = value.strip()
     return value or None
-
 
 def _validate_capture_date(value: str | None) -> str | None:
     value = _safe_text(value)
@@ -143,7 +128,6 @@ def _validate_capture_date(value: str | None) -> str | None:
         raise HTTPException(400, "capture_date YYYY-MM-DD formatında olmalı") from exc
     return value
 
-
 def _pid_alive(pid: int | None) -> bool:
     if not pid:
         return False
@@ -153,7 +137,6 @@ def _pid_alive(pid: int | None) -> bool:
         return False
     return True
 
-
 def _patch_state(uuid: str, **updates: Any) -> dict[str, Any]:
     current = _merge_task(uuid)
     current.update(updates)
@@ -162,10 +145,8 @@ def _patch_state(uuid: str, **updates: Any) -> dict[str, Any]:
     _write_json(_state_path(uuid), current)
     return current
 
-
 def _task_exists(uuid: str) -> bool:
     return _manifest_path(uuid).exists() or _state_path(uuid).exists()
-
 
 def _docker_compose_command(uuid: str) -> list[str]:
     docker = shutil.which("docker") or shutil.which("docker.exe")
@@ -188,7 +169,6 @@ def _docker_compose_command(uuid: str) -> list[str]:
         "/app/scripts/run_indoor_job.py",
         f"/workspace/{manifest_rel}",
     ]
-
 
 def _reconcile_running_tasks() -> None:
     changed = False
@@ -222,7 +202,6 @@ def _reconcile_running_tasks() -> None:
     if changed:
         return
 
-
 def dispatch_next_queued() -> None:
     _reconcile_running_tasks()
     tasks = [_merge_task(uuid) for uuid in _task_uuids()]
@@ -244,7 +223,7 @@ def dispatch_next_queued() -> None:
         with log_path.open("a", encoding="utf-8") as log_file:
             log_file.write(f"[{_now_iso()}] dispatch: {' '.join(command)}\n")
             log_file.flush()
-            process = subprocess.Popen(  # noqa: S603
+            process = subprocess.Popen(
                 command,
                 cwd=str(settings.PROJECT_DIR),
                 stdout=log_file,
@@ -272,7 +251,6 @@ def dispatch_next_queued() -> None:
         dispatch_error=None,
         error_summary=None,
     )
-
 
 async def create_task(
     *,
@@ -364,20 +342,17 @@ async def create_task(
     dispatch_next_queued()
     return {"uuid": uuid, "images_uploaded": len(files)}
 
-
 def list_tasks() -> list[dict[str, Any]]:
     dispatch_next_queued()
     tasks = [_merge_task(uuid) for uuid in _task_uuids()]
     tasks.sort(key=_sort_key, reverse=True)
     return tasks
 
-
 def get_task(uuid: str) -> dict[str, Any]:
     dispatch_next_queued()
     if not _task_exists(uuid):
         raise HTTPException(404, "Indoor task bulunamadı")
     return _merge_task(uuid)
-
 
 def delete_task(uuid: str) -> dict[str, Any]:
     if not _task_exists(uuid):
@@ -393,7 +368,6 @@ def delete_task(uuid: str) -> dict[str, Any]:
     dispatch_next_queued()
     return {"status": "removed", "uuid": uuid}
 
-
 def tileset_url(uuid: str) -> dict[str, str]:
     if not _task_exists(uuid):
         raise HTTPException(404, "Indoor task bulunamadı")
@@ -401,7 +375,6 @@ def tileset_url(uuid: str) -> dict[str, str]:
     if not path.exists():
         return {"url": ""}
     return {"url": f"/data/indoor/outputs/{uuid}/tiles/tileset.json"}
-
 
 def read_log(uuid: str) -> str:
     if not _task_exists(uuid):

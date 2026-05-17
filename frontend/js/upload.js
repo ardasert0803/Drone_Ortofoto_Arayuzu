@@ -1,4 +1,3 @@
-/* Drone ve indoor upload modallari. */
 window.AppUpload = (() => {
   const controllers = {};
 

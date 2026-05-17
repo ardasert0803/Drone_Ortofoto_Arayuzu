@@ -1,4 +1,3 @@
-/* Müze sunum modu ayar editörü */
 window.AppPresentationSettings = (() => {
   const CARD_LABELS = {
     hero: "Açılış",
