@@ -154,7 +154,9 @@
     dom.projectHeading.textContent = projectMeta.heading;
     dom.newProjectButton.textContent = projectMeta.button;
     dom.detailTitle.textContent = projectMeta.detailTitle;
-    dom.brandSubtitle.textContent = projectMeta.brandSubtitle;
+    if (dom.brandSubtitle) {
+      dom.brandSubtitle.textContent = projectMeta.brandSubtitle;
+    }
     dom.modeDroneButton.classList.add("active");
     const inConstrMode = !dom.sidebarConstruction.hidden;
     dom.droneLayerPanel.hidden = inConstrMode;
